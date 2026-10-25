@@ -28,3 +28,5 @@ test('UA providers do not open a browser and report pending player integration',
  assert.match(plugin,/mode:'pending'/);
  assert.doesNotMatch(plugin,/window\.open\(|www\.google\.com\/search/);
 });
+
+test('XOT menu parses and passes heading to select',()=>{assert.match(plugin,/source:s;\}\)\),'ХОТ · Оберіть джерело'/);assert.doesNotMatch(plugin,/source:s;\}\)\)\),'ХОТ · Оберіть джерело'/);});
