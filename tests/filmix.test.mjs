@@ -21,7 +21,7 @@ test('reject arbitrary host, malformed credentials and invalid film ids',async()
  assert.equal((await handleFilmix(req({action:'post',id:'abc'}),{})).status,400);
  const reply=await handleFilmix(req({action:'search',title:'Matrix'}),{FILMIX_API_BASE:'https://example.org/api/v2/'});
  assert.equal(reply.status,502);
- assert.equal((await reply.json()).error,'filmix_unavailable');
+ assert.equal((await reply.json()).error,'filmix_https_required');
 });
 test('device pairing does not leak secrets into a GET route',async()=>{
  const get=new Request('https://xot.test/api/filmix?device_token=secret');
@@ -42,5 +42,50 @@ test('Filmix search forwards the title with the device token on the upstream con
   assert.ok(seen.includes('story=The+Matrix'));
   assert.ok(seen.includes('user_dev_token=testtoken'));
   assert.ok(!JSON.stringify(data).includes('testtoken'));
+ }finally{globalThis.fetch=old;}
+});
+
+test('device pairing verifies changed token, not merely missing user_code',async()=>{
+ const original=globalThis.fetch;
+ let step='pair',lastURL='';
+ try{
+  globalThis.fetch=async url=>{
+   lastURL=String(url);
+   const payload=step==='pair'?{user_code:'ABCD',user_dev_token:'temporary'}:
+    step==='pending'?{user_code:'ABCD',user_dev_token:'temporary'}:
+    {user_code:'ABCD',user_dev_token:'permanent'};
+   return new Response(JSON.stringify(payload),{status:200});
+  };
+  const pair=await (await handleFilmix(req({action:'pair'}),{})).json();
+  assert.equal(pair.status,'pending');assert.equal(pair.user_code,'ABCD');
+  assert.equal(pair.temp_token,'temporary');assert.ok(!pair.device_token);
+  assert.ok(!lastURL.includes('user_dev_token='));
+  step='pending';
+  const wait=await (await handleFilmix(req({action:'confirm',temp_token:pair.temp_token}),{})).json();
+  assert.equal(wait.status,'pending');
+  assert.ok(!wait.device_token);
+  assert.ok(!lastURL.includes('user_dev_token='));
+  step='linked';
+  const linked=await (await handleFilmix(req({action:'confirm',temp_token:pair.temp_token}),{})).json();
+  assert.equal(linked.status,'linked');assert.equal(linked.device_token,'permanent');
+  assert.ok(!lastURL.includes('user_dev_token='));
+ }finally{globalThis.fetch=original;}
+});
+test('device without initial temporary token may still activate',async()=>{
+ const original=globalThis.fetch;
+ try{
+  globalThis.fetch=async()=>new Response(JSON.stringify({user_dev_token:'linked_token'}));
+  const result=await (await handleFilmix(req({action:'confirm',temp_token:''}),{})).json();
+  assert.equal(result.status,'linked');
+ }finally{globalThis.fetch=original;}
+});
+test('Filmix health probe never forwards any saved account token',async()=>{
+ const old=globalThis.fetch;let endpoint='';
+ try{
+  globalThis.fetch=async url=>{endpoint=String(url);return new Response(JSON.stringify({version:'2.2.0'}));};
+  const r=await (await handleFilmix(req({action:'probe',device_token:'sensitive_account_token'}),{})).json();
+  assert.equal(r.status,'reachable');
+  assert.ok(endpoint.includes('/check_update'));
+  assert.ok(!endpoint.includes('sensitive_account_token'));
  }finally{globalThis.fetch=old;}
 });
