@@ -79,18 +79,32 @@ export async function handleFilmix(request,env){
  if(!input||typeof input!=='object'||Array.isArray(input))return reply({error:'invalid_request'},400);
  const action=limit(input.action,24),device=limit(input.device_id,70),token=limit(input.device_token,270);
  if(!DEVICE.test(device)||token&&!TOKEN.test(token))return reply({error:'invalid_device_credentials'},400);
- if(!['pair','confirm','search','post','profile'].includes(action))return reply({error:'invalid_action'},400);
+ if(!['probe','pair','confirm','search','post','profile'].includes(action))return reply({error:'invalid_action'},400);
+ const temporary=limit(input.temp_token,270);
+ if(temporary&&!TOKEN.test(temporary))return reply({error:'invalid_temporary_token'},400);
+ if(action==='confirm'&&!temporary)return reply({error:'temporary_token_required'},400);
  let route='',params={};
  if(action==='pair'||action==='confirm')route='token_request';
+ if(action==='probe')route='check_update';
  if(action==='search'){route='search';const title=limit(input.title,120);if(!title)return reply({error:'title_required'},400);params.story=title;}
  if(action==='post'){const id=String(input.id||'');if(!/^\d{1,12}$/.test(id))return reply({error:'invalid_id'},400);route='post/'+id;}
  if(action==='profile')route='user_profile';
  try{
-  const response=await call(env&&env.FILMIX_API_BASE,route,device,token,params);
-  if(action==='pair'||action==='confirm'){
-   const userCode=limit(response&&response.user_code,8),deviceToken=limit(response&&(response.user_dev_token||response.code),256);
-   if(!deviceToken&&!userCode)return reply({error:'filmix_pairing_response_unrecognized'},502);
-   return reply({status:userCode?'pending':'linked',user_code:userCode||null,device_token:deviceToken||token||null,activation_url:'https://filmix.gg/consoles'});
+  // Pairing uses a stable device ID but never the preliminary or saved token
+  // as an auth credential. The upstream issues a new permanent token only
+  // after the user enters the code on Filmix's account page.
+  const response=await call(env&&env.FILMIX_API_BASE,route,device,['pair','confirm','probe'].includes(action)?'':token,params);
+  if(action==='probe')return reply({status:response&&typeof response==='object'?'reachable':'invalid_response'});
+  if(action==='pair'){
+   const userCode=limit(response&&response.user_code,8),temp=limit(response&&response.user_dev_token,256);
+   if(!userCode)return reply({error:'filmix_pairing_response_unrecognized'},502);
+   return reply({status:'pending',user_code:userCode,temp_token:temp,activation_url:'https://filmix.gg/consoles'});
+  }
+  if(action==='confirm'){
+   const permanent=limit(response&&response.user_dev_token,256);
+   if(permanent&&permanent!==temporary)
+    return reply({status:'linked',device_token:permanent,activation_url:'https://filmix.gg/consoles'});
+   return reply({status:'pending',user_code:limit(response&&response.user_code,8)||null,activation_url:'https://filmix.gg/consoles'});
   }
   if(action==='search'){
    const found=Array.isArray(response)?response:Array.isArray(response&&response.results)?response.results:[];
