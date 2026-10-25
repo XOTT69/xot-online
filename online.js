@@ -16,6 +16,7 @@ var SOURCES=[
 ];
 function notify(s){if(Lampa.Noty&&Lampa.Noty.show)Lampa.Noty.show(s);else console.log('[XOT]',s);}
 function title(c){return(c&&(c.title||c.name||c.original_title||c.original_name))||'';}
+function uniqueTitles(card){var result=[];function add(v){v=String(v||'').trim();if(v&&!result.some(function(x){return x.toLowerCase()===v.toLowerCase();}))result.push(v);}add(card.title);add(card.name);add(card.original_title);add(card.original_name);var alt=card.alternative_titles;if(alt&&Array.isArray(alt.results))alt.results.forEach(function(x){add(x.title||x.name);});return result;}
 function unwrap(value){if(!value||typeof value!=='object')return null;var candidates=[value.card,value.movie,value.data&&value.data.movie,value.data&&value.data.card,value.object&&value.object.card,value.object&&value.object.movie,value.data,value];for(var i=0;i<candidates.length;i++)if(candidates[i]&&title(candidates[i]))return candidates[i];return null;}
 function activeCard(){try{var a=Lampa.Activity&&Lampa.Activity.active&&Lampa.Activity.active();return unwrap(a)||unwrap(a&&a.params)||null;}catch(e){return null;}}
 function cardOf(e){return unwrap(e)||activeCard();}
@@ -47,7 +48,7 @@ function launchBalancer(card,src,query){
   }
  }catch(e){console.warn('[XOT] preference',e);}
 
- try{Lampa.Activity.push({url:'',title:'ХОТ · '+src.title,component:'online_mod',search:query||title(card),search_one:query||title(card),search_two:card.original_title||card.original_name||'',movie:card,page:1});}
+ try{var q=query||title(card);Lampa.Activity.push({url:'',title:'ХОТ · '+src.title,component:'online_mod',search:q,search_one:q,search_two:card.original_title||card.original_name||'',movie:card,page:1});}
  catch(e){console.error('[XOT]',e);notify('ХОТ: не вдалося відкрити '+src.title);}
 }
 function external(card,src,query){
@@ -74,8 +75,15 @@ function chooseQuery(card,source){
  add(card.title||card.name,'Назва у Lampa');
  add(card.original_title||card.original_name,'Оригінальна назва');
  if(card.alternative_titles&&card.alternative_titles.results)card.alternative_titles.results.slice(0,6).forEach(function(v){add(v.title,'Альтернативна назва');});
+ // Filmix and Rezka search local catalogs; an English title often yields fewer matches.
+ // Offer all known titles, but do not claim one query will work for every provider.
  if(candidates.length<=1)return external(card,source,title(card));
- select(candidates,'ХОТ · '+source.title+' · Варіант пошуку',function(selected){if(selected&&selected.query)external(card,source,selected.query);});
+ candidates.push({title:'Допомога з пошуком',subtitle:'Чому джерело може не знаходити відео',query:'__help__'});
+ select(candidates,'ХОТ · '+source.title+' · Варіант пошуку',function(selected){if(selected&&selected.query){if(selected.query==='__help__')return showHelp(source);external(card,source,selected.query);}});
+}
+function showHelp(source){
+ var info=source.id==='rezka2'?'HDRezka може не відповідати на запити із Safari через обмеження мережі або браузера. Це не означає, що зник інтернет. Спробуй інше джерело або Lampa Android.':'Пошук залежить від API джерела. Спробуй оригінальну чи альтернативну назву.';
+ select([{title:'Пошук за іншою назвою',subtitle:'Повернутися до вибору назви',action:'query'},{title:'Інформація',subtitle:info,action:'info'}],'ХОТ · '+source.title+' · Діагностика',function(v){if(v&&v.action==='query'){var card=activeCard()||lastCard;if(card)chooseQuery(card,source);}else notify(info);});
 }
 function open(card){
  if(!card||!title(card))return notify('ХОТ: немає даних про фільм');
