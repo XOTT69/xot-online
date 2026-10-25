@@ -27,7 +27,7 @@ export default {async fetch(request,env){
    return (Array.isArray(found)?found:[]).map(item=>normalize(item,job.provider)).filter(Boolean);
   }));
   const result=settled.flatMap((r,i)=>r.status==='fulfilled'?r.value:[]).map(item=>({...item,score:matchScore(item,query)})).filter(item=>item.score>=65);
-  const unique=[...new Map(result.map(item=>[item.provider+'|'+item.title+'|'+(item.year||''),item])).values()];
+  const unique=[...new Map(result.map(item=>[item.provider+'|'+(item.url||item.id||item.title)+'|'+(item.episode||''),item])).values()];
   return json({query:{title:query.title,year:query.year,tmdb_id:query.tmdb_id},results:unique.sort((a,b)=>b.score-a.score),provider_status:jobs.map((job,i)=>({id:job.provider.id,query:job.title,ok:settled[i].status==='fulfilled',error:settled[i].status==='rejected'?safeError(settled[i].reason):null}))});
  }
  return env.ASSETS?env.ASSETS.fetch(request):json({error:'not_found'},404);
