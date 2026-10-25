@@ -154,6 +154,7 @@ function registerScreen(){
   var $=window.jQuery,card=params.movie||{},root=$('<div class="xot-screen" style="padding:1.2em 2em 3em;min-height:70vh;overflow:auto;max-height:85vh"></div>');
   var destroyed=false,started=false,serial=0,filmix=[],catalog=[],filmixLoading=false,catalogLoading=false,errorFilmix='',view='home',selected=null,lastFocus=null,pairing=null;
   function text(s){return String(s==null?'':s);}
+  function readableError(code){var errors={filmix_unavailable:'Не вдалося з’єднатися з Filmix API через HTTPS',filmix_timeout:'Filmix API не відповів вчасно',filmix_http_401:'Filmix відхилив авторизацію пристрою',filmix_http_403:'Доступ до Filmix API обмежено',filmix_http_404:'Адреса Filmix API змінилася',filmix_https_required:'Безпечне HTTPS-з’єднання недоступне',filmix_invalid_json:'Filmix повернув невідомий формат відповіді'};return errors[code]||code||'невідома помилка';}
   function line(head,note,action){
    var el=$('<div class="selector xot-line" tabindex="0" style="padding:.75em 1em;margin:.35em 0;border-radius:.55em;background:rgba(255,255,255,.07);cursor:pointer"></div>');
    $('<div style="font-size:1.08em"></div>').text(head).appendTo(el);
@@ -178,6 +179,11 @@ function registerScreen(){
    line('Filmix · '+(filmixLoading?'пошук…':filmix.length?'знайдено '+filmix.length:'немає збігів'),errorFilmix||'Авторизація за кодом пристрою доступна нижче',function(){filmixLookup();});
    filmix.forEach(function(item){line('Filmix · '+item.title+(item.year?' ('+item.year+')':''),item.original_title||'Натисни для вибору озвучення та якості',function(){showFilmix(item);});});
    line('Прив’язати Filmix за кодом','Активувати пристрій на filmix.gg/consoles',function(){beginPair();});
+   line('Перевірити з’єднання Filmix','Діагностика HTTPS API без логіна й токена',function(){
+    notify('ХОТ: перевіряємо Filmix API…');
+    filmixRequest('probe',{device_token:''}).then(function(r){notify(r.status==='reachable'?'Filmix: HTTPS API відповідає':'Filmix: невідома відповідь API');})
+    .catch(function(e){notify('Filmix: '+readableError(e.message));});
+   });
    if(storageGet('xot_filmix_device_token',''))line('Filmix · від’єднати пристрій','Прибрати збережену авторизацію з цієї Lampa',function(){
     storageSet('xot_filmix_device_token','');storageSet('xot_filmix_pending',null);filmixLookup();
    });
@@ -226,7 +232,7 @@ function registerScreen(){
    filmixRequest('pair',{device_token:''}).then(function(j){
     if(destroyed)return;
     pairing=j;storageSet('xot_filmix_pending',j);drawPair();
-   }).catch(function(e){if(destroyed)return;header('Filmix · помилка прив’язки');line('Спробувати ще раз',e.message,function(){beginPair(true);});focus();});
+   }).catch(function(e){if(destroyed)return;header('Filmix · помилка прив’язки');line('Спробувати ще раз',readableError(e.message),function(){beginPair(true);});focus();});
   }
   function confirmPair(){
    if(!pairing||!pairing.user_code){notify('ХОТ: спочатку отримай код пристрою');return;}
@@ -237,7 +243,7 @@ function registerScreen(){
      storageSet('xot_filmix_device_token',j.device_token);storageSet('xot_filmix_pending',null);
      pairing=null;view='home';notify('Filmix: пристрій прив’язаний');filmixLookup();
     }else{pairing=Object.assign({},pairing,{status:'pending'});drawPair();notify('Filmix: код ще не підтверджено');}
-   }).catch(function(e){if(destroyed)return;drawPair();notify('Filmix: '+e.message);});
+   }).catch(function(e){if(destroyed)return;drawPair();notify('Filmix: '+readableError(e.message));});
   }
   function showFilmix(item){
    header('Filmix · завантаження озвучень…');
@@ -257,7 +263,7 @@ function registerScreen(){
      if(!all.length)errorFilmix=(groups.find(function(g){return g.error;})||{}).error||'';
      filmix=all.filter(function(item){if(seen[item.id]||!filmixMatched(item,card))return false;seen[item.id]=true;return true;});
      filmixLoading=false;render();
-    }).catch(function(e){if(destroyed||token!==serial)return;errorFilmix='API: '+e.message;filmixLoading=false;render();});
+    }).catch(function(e){if(destroyed||token!==serial)return;errorFilmix='API: '+readableError(e.message);filmixLoading=false;render();});
   }
   function catalogLookup(){
    catalogLoading=true;render();
