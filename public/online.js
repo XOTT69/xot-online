@@ -21,6 +21,19 @@ function activeCard(){try{var a=Lampa.Activity&&Lampa.Activity.active&&Lampa.Act
 function cardOf(e){return unwrap(e)||activeCard();}
 function storageGet(k,d){try{return Lampa.Storage.get(k,d);}catch(e){return d;}}
 function storageSet(k,v){try{Lampa.Storage.set(k,v);}catch(e){console.warn('[XOT] Storage error',e);}}
+function select(items,heading,done){
+ if(!Lampa.Select||typeof Lampa.Select.show!=='function')return notify('ХОТ: меню Lampa.Select недоступне');
+ try{
+  Lampa.Select.show({
+   title:heading,items:items,
+   onSelect:function(item){
+    if(Lampa.Controller&&Lampa.Controller.toggle)Lampa.Controller.toggle('content');
+    if(typeof done==='function')done(item);
+   },
+   onBack:function(){if(Lampa.Controller&&Lampa.Controller.toggle)Lampa.Controller.toggle('content');}
+  });
+ }catch(error){console.error('[XOT] select',error);notify('ХОТ: помилка відкриття меню');}
+}
 function modReady(){try{return !!(Lampa.SettingsApi&&Lampa.SettingsApi.getComponent&&Lampa.SettingsApi.getComponent('online_mod'))||window.__XOT_MOD_LOADED===true;}catch(e){return window.__XOT_MOD_LOADED===true;}}
 function launchBalancer(card,src){
  if(!Lampa.Activity||!Lampa.Activity.push)return notify('ХОТ: Online MOD не підтримується цією версією Lampa');
