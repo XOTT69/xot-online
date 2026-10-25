@@ -204,7 +204,7 @@ function registerScreen(){
    var items=selected&&selected.items||[];
    if(!items.length)line('Потоки відсутні','Можливо, потрібна авторизація або інша озвучка',function(){});
    items.forEach(function(item){
-    line([item.season?'S'+item.season+'E'+item.episode:'Фільм',item.translation,item.quality].filter(Boolean).join(' · '),item.url.replace(/([?&]user_dev_token=)[^&]+/g,'$1***').slice(0,130),function(){play(item);});
+    line([item.season?'S'+item.season+'E'+item.episode:'Фільм',item.translation,item.quality].filter(Boolean).join(' · '),'Відтворити у вбудованому плеєрі Lampa',function(){play(item);});
    });
    focus();
   }
@@ -242,10 +242,7 @@ function registerScreen(){
   function showFilmix(item){
    header('Filmix · завантаження озвучень…');
    var token=++serial;
-   var account=storageGet('xot_filmix_device_token','');
-   var plan=account?'free':'guest';
-   var profile=account?filmixRequest('profile').then(function(p){return p.pro_plus?'pro_plus':p.pro?'pro':'free';}).catch(function(){return 'free';}):Promise.resolve('guest');
-   profile.then(function(p){plan=p;return filmixRequest('post',{id:item.id,plan:plan});}).then(function(j){
+   filmixRequest('post',{id:item.id}).then(function(j){
     if(destroyed||token!==serial)return;selected={title:item.title,items:j.items||[]};view='streams';render();
    }).catch(function(e){if(destroyed||token!==serial)return;selected={title:item.title,items:[]};view='streams';render();notify('Filmix: '+e.message);});
   }
