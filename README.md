@@ -42,3 +42,7 @@ npm run deploy
 ```
 
 Зовнішній модуль зафіксовано на ревізії `851bcc9bc064ac06dc2b0e7ff6631baba61be511` і завантажується лише після згоди. Не публікуйте токени/секрети у GitHub.
+
+## Власний Kodik search API
+
+Адаптер Kodik підключається **лише** після додавання секрету Worker `KODIK_TOKEN` з токеном, на який у вас є дозвіл. Cloudflare Dashboard → Worker → Settings → Variables and Secrets → Add → **Secret** → `KODIK_TOKEN`. Не публікуйте ключ у репозиторії чи чаті. Після налаштування та нового деплою `GET /api/providers` показує `kodik.enabled: true`, а `/api/search` надсилає багатоваріантний пошук до Kodik. Без токена `provider_count: 0` — очікувано. Адаптер на цьому етапі повертає **тільки метадані**; пошук і відтворення в UI поки здійснюються через Online MOD.
