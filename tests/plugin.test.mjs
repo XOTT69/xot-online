@@ -41,3 +41,19 @@ test('Filmix independently pairs, searches and opens native Lampa streams',()=>{
  assert.match(plugin,/filmixRequest\('post'/);
  assert.match(plugin,/Lampa\.Player\.play\(p\)/);
 });
+
+test('Online MOD providers appear first, not hidden as fallback',()=>{
+ assert.match(plugin,/section\('Онлайн-джерела'/);
+ assert.match(plugin,/SOURCES\.filter\(function\(s\)\{return s\.mode==='external';\}\)/);
+ assert.match(plugin,/external\(card,source,title\(card\)\)/);
+ assert.doesNotMatch(plugin,/Резерв · Online MOD \(необов’язково\)/);
+});
+test('Filmix experimental API never blocks the initial source picker',()=>{
+ assert.match(plugin,/if\(!started\)\{started=true;catalogLookup\(\);\}/);
+ assert.match(plugin,/function toolsView\(\)/);
+ assert.match(plugin,/Filmix · незалежний пошук \(експеримент\)/);
+});
+test('connected provider configuration is retrieved separately',()=>{
+ assert.match(plugin,/fetch\(API_BASE\+'\/api\/providers'\)/);
+ assert.match(plugin,/не підключено/);
+});
