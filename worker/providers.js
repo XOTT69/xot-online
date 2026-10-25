@@ -56,9 +56,9 @@ const catalogProvider={
 };
 export const providers=[...UA_SOURCES.map(uaProvider),catalogProvider,{
  id:'kodik',name:'Kodik',
- enabled(){return true;},
+ enabled(env){return Boolean(env&&env.KODIK_TOKEN);},
  async search(query,env){
-  const token=await getKodikToken(env);
+  const token=env&&env.KODIK_TOKEN;
   const url=new URL(KODIK_API);
   url.searchParams.set('token',token);
   url.searchParams.set('title',query.title);
