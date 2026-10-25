@@ -229,14 +229,14 @@ function registerScreen(){
    }).catch(function(e){if(destroyed)return;header('Filmix · помилка прив’язки');line('Спробувати ще раз',e.message,function(){beginPair(true);});focus();});
   }
   function confirmPair(){
-   if(!pairing||!pairing.device_token){notify('ХОТ: спочатку отримай код пристрою');return;}
+   if(!pairing||!pairing.user_code){notify('ХОТ: спочатку отримай код пристрою');return;}
    header('Filmix · перевіряємо код…');
-   filmixRequest('confirm',{device_token:pairing.device_token}).then(function(j){
+   filmixRequest('confirm',{device_token:'',temp_token:pairing.temp_token||''}).then(function(j){
     if(destroyed)return;
     if(j.status==='linked'&&j.device_token){
      storageSet('xot_filmix_device_token',j.device_token);storageSet('xot_filmix_pending',null);
      pairing=null;view='home';notify('Filmix: пристрій прив’язаний');filmixLookup();
-    }else{pairing=Object.assign({},pairing,j);drawPair();notify('Filmix: код ще не підтверджено');}
+    }else{pairing=Object.assign({},pairing,{status:'pending'});drawPair();notify('Filmix: код ще не підтверджено');}
    }).catch(function(e){if(destroyed)return;drawPair();notify('Filmix: '+e.message);});
   }
   function showFilmix(item){
