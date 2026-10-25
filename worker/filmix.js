@@ -54,11 +54,13 @@ export function flattenFilmixPost(post,cap=480){
   const season=Number(number)||0;
   if(!season||!voices||typeof voices!=='object')continue;
   for(const [voice,raw] of Object.entries(voices)){
-   const episodes=Array.isArray(raw)?raw:Array.isArray(raw&&raw.episodes)?raw.episodes:raw&&typeof raw==='object'?Object.values(raw):[];
-   episodes.forEach((item,i)=>{
+   const episodes=Array.isArray(raw)?raw.map((entry,i)=>[i+1,entry]):
+    Array.isArray(raw&&raw.episodes)?raw.episodes.map((entry,i)=>[i+1,entry]):
+    raw&&typeof raw==='object'?Object.entries(raw).sort((a,b)=>Number(a[0])-Number(b[0])):[];
+   episodes.forEach(([key,item])=>{
     const link=typeof item==='string'?item:item&&item.link;
-    const num=(item&&Number(item.number||item.episode))||i+1;
-    add(voice,link,season,num);
+    const num=(item&&Number(item.number||item.episode))||Number(key);
+    if(Number.isInteger(num)&&num>0)add(voice,link,season,num);
    });
   }
  }
