@@ -63,3 +63,14 @@ UAFILM, UASerials і UAKino позначені як **очікує API для La
 Для власного каталогу потоків, які можна законно відтворювати, у Cloudflare Worker задайте `XOT_CATALOG_URL` (HTTPS endpoint з відповіддю JSON `{"results":[{"title":"Назва","year":2026,"source":"Моє джерело","translation":"Українська","quality":"1080p","url":"https://media.example/video.m3u8"}]}`). Worker передає `title`, `year` та `tmdb_id` як параметри запиту. Зберігайте каталог за довіреним HTTPS URL; Worker не обходить географічні обмеження, DRM чи авторизацію. Без `XOT_CATALOG_URL` каталог вимкнений, результати Kodik із embed-посиланнями не передаються у плеєр.
 
 **Поточна межа:** Filmix, HDRezka, UAKino, UASerials та UAFILM поки НЕ мають незалежних перевірених адаптерів, які повертають прямі потоки. Для Filmix/Rezka збережено Online MOD; його пошук не входить в агрегатор `/api/search`. Нова функція є готовим потоком UI → Worker → Lampa.Player, але не означає автоматичну появу відео з непідключених сервісів.
+
+## Окремі налаштовувані UA-адаптери
+
+Worker підтримує власні HTTPS JSON endpoints через змінні середовища:
+- `XOT_UAKINO_API_URL` → `provider=uakino`
+- `XOT_UASERIALS_API_URL` → `provider=uaserials`
+- `XOT_UAFILM_API_URL` → `provider=uafilm`
+- `XOT_FILMIX_API_URL` → `provider=filmix_api`
+- `XOT_REZKA_API_URL` → `provider=rezka_api`
+
+Це **контракт адаптерів** для власного/дозволеного JSON API, а не URL оригінального вебсайту. Очікувана відповідь: `{"results":[{"title":"Example","year":2026,"url":"https://media.example/video.m3u8","quality":"1080p","translation":"UA","source":"UAKino"}]}`. Кожен endpoint одержує параметри `title`, `year`, `tmdb_id`. Вхідні результати без HTTPS прямого потоку відкидаються. За відсутності відповідної змінної джерело показує стан «не підключено», не відкриваючи браузер. Реальні API з підтвердженим правом видавати потоки потрібні окремо.
