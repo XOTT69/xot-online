@@ -10,7 +10,7 @@ function reply(data,status=200){return new Response(JSON.stringify(data),{status
 function limit(v,max){return String(v||'').trim().slice(0,max);}
 function safeURL(api,path,device,token,extra={}){
  const base=new URL(api||DEFAULT_API);
- if(!['http:','https:'].includes(base.protocol)||base.hostname!=='filmixapp.cyou')throw new Error('api_host_not_allowed');
+ if(base.protocol!=='https:'||base.hostname!=='filmixapp.cyou')throw new Error('filmix_https_required');
  const url=new URL(base.toString().replace(/\/?$/,'/')+path);
  url.searchParams.set('user_dev_id',device);
  url.searchParams.set('user_dev_name','XOT');
@@ -66,7 +66,7 @@ export function flattenFilmixPost(post,cap=480){
 }
 function err(e){
  const str=String(e&&e.message||'unavailable');
- if(/^filmix_(?:http_\d{3}|invalid_json|response_too_large|api_error)$/.test(str))return str;
+ if(/^filmix_(?:http_\d{3}|invalid_json|response_too_large|api_error|https_required)$/.test(str))return str;
  if(/timeout|abort/i.test(str))return 'filmix_timeout';
  return 'filmix_unavailable';
 }
