@@ -115,7 +115,7 @@ function searchAll(card,sourceId){
 }
 function open(card){
  if(!card||!title(card))return notify('ХОТ: немає даних про фільм');
- select([{title:'Автопошук · усі доступні джерела',subtitle:'Знайти прямі потоки й відкрити в плеєрі Lampa',auto:true}].concat(SOURCES.map(function(s){return{title:s.title,subtitle:s.description,source:s};}))),'ХОТ · Оберіть джерело',function(chosen){
+ select([{title:'Автопошук · усі доступні джерела',subtitle:'Знайти прямі потоки й відкрити в плеєрі Lampa',auto:true}].concat(SOURCES.map(function(s){return{title:s.title,subtitle:s.description,source:s};})),'ХОТ · Оберіть джерело',function(chosen){
   if(!chosen)return;
   if(chosen.auto)return searchAll(card);
   if(!chosen.source)return;
@@ -132,6 +132,14 @@ function button(e){
  b.on('hover:enter click',function(){var current=activeCard()||lastCard;if(!current||!title(current))return notify('ХОТ: картка недоступна');open(current);});
  area.append(b);
 }
-if(Lampa.Listener&&Lampa.Listener.follow)Lampa.Listener.follow('full',function(e){if(e&&['complite','complete','render'].indexOf(e.type)!==-1)setTimeout(function(){button(e);},0);});
+if(Lampa.Listener&&Lampa.Listener.follow)Lampa.Listener.follow('full',function(e){
+ if(e&&['complite','complete','render'].indexOf(e.type)!==-1){
+  setTimeout(function(){button(e);},0);
+  setTimeout(function(){button(e);},350);
+ }
+});
+if(document.readyState==='loading'){
+ document.addEventListener('DOMContentLoaded',function(){setTimeout(function(){button();},300);},{once:true});
+}else setTimeout(function(){button();},300);
 console.info('[XOT] Multi-source selector initialized');
 })();
