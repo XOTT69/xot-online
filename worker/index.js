@@ -2,6 +2,13 @@ import {providers,normalize} from './providers.js';
 import {buildQueries,matchScore} from './matching.js';
 const headers={'content-type':'application/json; charset=utf-8','cache-control':'no-store','access-control-allow-origin':'*','x-content-type-options':'nosniff'};
 function json(data,status=200){return new Response(JSON.stringify(data),{status,headers});}
+function safeError(error){
+ const msg=String(error&&error.message||'unknown');
+ if(/^kodik_(public_token_unavailable|public_token_not_found|bad_response)$/.test(msg))return msg;
+ if(/^kodik_http_\\d{3}$/.test(msg))return msg;
+ if(/timeout|abort/i.test(msg))return 'upstream_timeout';
+ return 'upstream_request_failed';
+}
 function getQuery(url){return {title:(url.searchParams.get('title')||'').trim(),tmdb_id:(url.searchParams.get('tmdb_id')||'').trim(),year:(url.searchParams.get('year')||'').trim(),alternative_titles:url.searchParams.getAll('alt').filter(x=>x.length<=200).slice(0,8)};}
 function check(q){return ((q.title && q.title.length<=200)||/^\d{1,12}$/.test(q.tmdb_id))&&(!q.year||/^\d{4}$/.test(q.year));}
 export default {async fetch(request,env){
@@ -21,7 +28,7 @@ export default {async fetch(request,env){
   }));
   const result=settled.flatMap((r,i)=>r.status==='fulfilled'?r.value:[]).map(item=>({...item,score:matchScore(item,query)})).filter(item=>item.score>=65);
   const unique=[...new Map(result.map(item=>[item.provider+'|'+item.title+'|'+(item.year||''),item])).values()];
-  return json({query:{title:query.title,year:query.year,tmdb_id:query.tmdb_id},results:unique.sort((a,b)=>b.score-a.score),provider_status:jobs.map((job,i)=>({id:job.provider.id,query:job.title,ok:settled[i].status==='fulfilled'}))});
+  return json({query:{title:query.title,year:query.year,tmdb_id:query.tmdb_id},results:unique.sort((a,b)=>b.score-a.score),provider_status:jobs.map((job,i)=>({id:job.provider.id,query:job.title,ok:settled[i].status==='fulfilled',error:settled[i].status==='rejected'?safeError(settled[i].reason):null}))});
  }
  return env.ASSETS?env.ASSETS.fetch(request):json({error:'not_found'},404);
 }};
