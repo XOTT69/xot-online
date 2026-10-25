@@ -21,14 +21,17 @@ export default {async fetch(request,env){
   const query=getQuery(url);if(!check(query))return json({error:'invalid_query'},400);
   const titles=buildQueries(query);
   if(url.pathname==='/api/query-plan')return json({titles,tmdb_id:query.tmdb_id||null,year:query.year||null});
-  const jobs=providers.filter(p=>!p.enabled||p.enabled(env)).flatMap(provider=>titles.map(title=>({provider,title})));
+  const providerFilter=(url.searchParams.get('provider')||'').trim();
+  if(providerFilter&&!/^[a-z_]{2,40}$/.test(providerFilter))return json({error:'invalid_provider'},400);
+  const available=providers.filter(p=>(!providerFilter||p.id===providerFilter)&&(!p.enabled||p.enabled(env)));
+  const jobs=available.flatMap(provider=>titles.map(title=>({provider,title})));
   const settled=await Promise.allSettled(jobs.map(async job=>{
    const found=await Promise.race([job.provider.search({...query,title:job.title},env),new Promise((_,reject)=>setTimeout(()=>reject(new Error('timeout')),6500))]);
    return (Array.isArray(found)?found:[]).map(item=>normalize(item,job.provider)).filter(Boolean);
   }));
   const result=settled.flatMap((r,i)=>r.status==='fulfilled'?r.value:[]).map(item=>({...item,score:matchScore(item,query)})).filter(item=>item.score>=65);
   const unique=[...new Map(result.map(item=>[item.provider+'|'+(item.url||item.id||item.title)+'|'+(item.episode||''),item])).values()];
-  return json({query:{title:query.title,year:query.year,tmdb_id:query.tmdb_id},results:unique.sort((a,b)=>b.score-a.score),provider_status:jobs.map((job,i)=>({id:job.provider.id,query:job.title,ok:settled[i].status==='fulfilled',error:settled[i].status==='rejected'?safeError(settled[i].reason):null}))});
+  return json({query:{title:query.title,year:query.year,tmdb_id:query.tmdb_id},configured_providers:available.map(p=>p.id),results:unique.sort((a,b)=>b.score-a.score),provider_status:jobs.map((job,i)=>({id:job.provider.id,query:job.title,ok:settled[i].status==='fulfilled',error:settled[i].status==='rejected'?safeError(settled[i].reason):null}))});
  }
  return env.ASSETS?env.ASSETS.fetch(request):json({error:'not_found'},404);
 }};
