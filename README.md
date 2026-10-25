@@ -57,3 +57,9 @@ https://xot-online.<your-subdomain>.workers.dev/m.js
 Зробіть новий деплой у Cloudflare (автодеплой за підключеним GitHub або `npm run deploy`). Перевірте `/api/health`: очікується `provider_count: 1`. Натисніть **ХОТ** у картці відповідного відео. Якщо метадані Archive не містять сумісного відео, плагін чесно повідомить про відсутність варіантів. Кнопка в Lampa не означає, що джерело гарантує відтворення.
 
 <!-- Trigger Cloudflare Git integration build for provider update (2026-10-25). -->
+
+## Multi-source selector (2026-10-25)
+
+Кнопка **ХОТ** відкриває меню Filmix, HDRezka, Kodik, CDNVideoHub, AniLibria та Internet Archive. **Filmix/HDRezka/Kodik/CDNVideoHub/AniLibria працюють через зовнішній Online MOD**, який завантажується з зафіксованої ревізії лише після дозволу користувача. Це не власні API-адаптери, і їхня доступність не гарантується. Internet Archive — власний незалежний адаптер Cloudflare Worker. Лічильник `provider_count: 1` лишається правильним. Секрети Filmix не слід додавати в репозиторій.
+
+Showy і WTCH використані як орієнтири для інтерфейсу та архітектури; їхній серверний код/API не отримано, тож жодна нібито сумісна реалізація не заявляється.
