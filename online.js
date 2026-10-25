@@ -103,7 +103,17 @@ function searchAll(card,sourceId){
  notify('ХОТ: шукаємо доступні потоки…');
  fetch(API_BASE+'/api/search?'+p.toString()).then(function(resp){if(!resp.ok)throw Error('API '+resp.status);return resp.json();}).then(function(data){
   var ready=(data.results||[]).filter(function(x){return x.url&&/^https:\/\//.test(x.url)&&/\.(m3u8|mp4|mpd)(?:[?#]|$)/i.test(x.url);});
-  if(!ready.length){var configured=(data.configured_providers||[]);notify(sourceId&&!configured.length?'ХОТ: джерело ще не має підключеного API':'ХОТ: доступних потоків не знайдено. Filmix і Rezka можна відкрити через Online MOD.');return;}
+  if(!ready.length){
+   var configured=(data.configured_providers||[]);
+   select([
+    {title:'Filmix · дивитися в Lampa',subtitle:'Пошук через Online MOD',source:SOURCES[0]},
+    {title:'HDRezka · дивитися в Lampa',subtitle:'Пошук через Online MOD',source:SOURCES[1]},
+    {title:'Kodik · дивитися в Lampa',subtitle:'Пошук через Online MOD',source:SOURCES[2]}
+   ],'ХОТ · '+(sourceId&&!configured.length?'API джерела не підключено':'Прямих потоків не знайдено'),function(choice){
+    if(choice&&choice.source)chooseQuery(card,choice.source);
+   });
+   return;
+  }
   select(ready.map(function(item){return {title:item.title+(item.episode?' · S'+item.season+'E'+item.episode:''),subtitle:[item.source||item.provider,item.translation,item.quality].filter(Boolean).join(' · '),item:item};}),
    'ХОТ · Знайдені відео',function(choice){
     if(!choice||!choice.item)return;
