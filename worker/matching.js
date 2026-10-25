@@ -18,5 +18,7 @@ export function matchScore(candidate, query) {
 }
 export function buildQueries(input) {
  const all=[input.title,...(input.alternative_titles||[])].filter(v=>typeof v==='string').map(v=>v.trim()).filter(Boolean);
- return [...new Map(all.map(v=>[normalizeTitle(v),v])).values()].slice(0,10);
+ const unique=new Map();
+ for(const name of all){const key=normalizeTitle(name);if(key&&!unique.has(key))unique.set(key,name);}
+ return [...unique.values()].slice(0,10);
 }
