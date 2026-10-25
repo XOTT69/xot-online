@@ -8,13 +8,13 @@ export default {async fetch(request,env){
  const url=new URL(request.url);
  if(request.method==='OPTIONS')return new Response(null,{status:204,headers:{...headers,'access-control-allow-methods':'GET, OPTIONS'}});
  if(request.method!=='GET')return json({error:'method_not_allowed'},405);
- if(url.pathname==='/api/health')return json({ok:true,service:'xot-online',provider_count:providers.length});
- if(url.pathname==='/api/providers')return json({providers:providers.map(p=>({id:p.id,name:p.name}))});
+ if(url.pathname==='/api/health')return json({ok:true,service:'xot-online',provider_count:providers.filter(p=>!p.enabled||p.enabled(env)).length});
+ if(url.pathname==='/api/providers')return json({providers:providers.map(p=>({id:p.id,name:p.name,enabled:!p.enabled||p.enabled(env)}))});
  if(url.pathname==='/api/query-plan'||url.pathname==='/api/search'){
   const query=getQuery(url);if(!check(query))return json({error:'invalid_query'},400);
   const titles=buildQueries(query);
   if(url.pathname==='/api/query-plan')return json({titles,tmdb_id:query.tmdb_id||null,year:query.year||null});
-  const jobs=providers.flatMap(provider=>titles.map(title=>({provider,title})));
+  const jobs=providers.filter(p=>!p.enabled||p.enabled(env)).flatMap(provider=>titles.map(title=>({provider,title})));
   const settled=await Promise.allSettled(jobs.map(async job=>{
    const found=await Promise.race([job.provider.search({...query,title:job.title},env),new Promise((_,reject)=>setTimeout(()=>reject(new Error('timeout')),6500))]);
    return (Array.isArray(found)?found:[]).map(item=>normalize(item,job.provider)).filter(Boolean);
