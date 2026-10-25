@@ -89,9 +89,9 @@ function showHelp(source){
  select([{title:'Пошук за іншою назвою',subtitle:'Повернутися до вибору назви',action:'query'},{title:'Інформація',subtitle:info,action:'info'}],'ХОТ · '+source.title+' · Діагностика',function(v){if(v&&v.action==='query'){var card=activeCard()||lastCard;if(card)chooseQuery(card,source);}else notify(info);});
 }
 function openCatalog(card,source){
- notify('ХОТ: '+source.title+' — інтеграція з плеєром ще не підключена. Веббраузер не відкриваємо.');
+ notify('ХОТ: '+source.title+' — потрібен підключений API потоків.');
 }
-function searchAll(card){
+function searchAll(card,sourceId){
  if(!window.fetch)return notify('ХОТ: браузер не підтримує мережеві запити');
  var urls=uniqueTitles(card);
  var p=new URLSearchParams();
@@ -99,10 +99,11 @@ function searchAll(card){
  urls.slice(1,8).forEach(function(q){p.append('alt',q);});
  if(card.release_date||card.first_air_date)p.set('year',String(card.release_date||card.first_air_date).slice(0,4));
  if(card.id)p.set('tmdb_id',String(card.id));
+ if(sourceId)p.set('provider',sourceId);
  notify('ХОТ: шукаємо доступні потоки…');
  fetch(API_BASE+'/api/search?'+p.toString()).then(function(resp){if(!resp.ok)throw Error('API '+resp.status);return resp.json();}).then(function(data){
   var ready=(data.results||[]).filter(function(x){return x.url&&/^https:\/\//.test(x.url)&&/\.(m3u8|mp4|mpd)(?:[?#]|$)/i.test(x.url);});
-  if(!ready.length){notify('ХОТ: прямих потоків поки немає. Спробуй Filmix або Rezka через Online MOD.');return;}
+  if(!ready.length){var configured=(data.configured_providers||[]);notify(sourceId&&!configured.length?'ХОТ: джерело ще не має підключеного API':'ХОТ: доступних потоків не знайдено. Filmix і Rezka можна відкрити через Online MOD.');return;}
   select(ready.map(function(item){return {title:item.title+(item.episode?' · S'+item.season+'E'+item.episode:''),subtitle:[item.source||item.provider,item.translation,item.quality].filter(Boolean).join(' · '),item:item};}),
    'ХОТ · Знайдені відео',function(choice){
     if(!choice||!choice.item)return;
@@ -118,7 +119,7 @@ function open(card){
   if(!chosen)return;
   if(chosen.auto)return searchAll(card);
   if(!chosen.source)return;
-  if(chosen.source.mode==='pending')return openCatalog(card,chosen.source);
+  if(chosen.source.mode==='pending')return searchAll(card,chosen.source.id);
   chooseQuery(card,chosen.source);
  });
 }
