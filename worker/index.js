@@ -1,4 +1,4 @@
-import {providers,normalize,archiveVariants} from './providers.js';
+import {providers,normalize} from './providers.js';
 const headers={'content-type':'application/json; charset=utf-8','cache-control':'no-store','access-control-allow-origin':'*','x-content-type-options':'nosniff'};
 function json(data,status=200){return new Response(JSON.stringify(data),{status,headers});}
 export default {async fetch(request,env){
@@ -14,11 +14,6 @@ export default {async fetch(request,env){
     const status=await Promise.allSettled(providers.map(p=>p.search(query,env)));
     return json({query,results:status.flatMap((r,i)=>r.status==='fulfilled'?(Array.isArray(r.value)?r.value:[]).map(x=>normalize(x,providers[i])).filter(Boolean):[]),
       provider_status:status.map((r,i)=>({id:providers[i].id,ok:r.status==='fulfilled'}))});
-  }
-  if(url.pathname==='/api/variants'){
-    if(url.searchParams.get('provider')!=='archive')return json({error:'unsupported_provider'},400);
-    try{return json({variants:await archiveVariants(url.searchParams.get('identifier')||'')});}
-    catch(e){return json({error:e.message==='invalid_identifier'?'invalid_identifier':'source_unavailable'},e.message==='invalid_identifier'?400:502);}
   }
   return env.ASSETS?env.ASSETS.fetch(request):json({error:'not_found'},404);
 }};
