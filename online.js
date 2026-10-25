@@ -126,9 +126,11 @@ function searchAll(card,sourceId){
 function safeText(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
 function playerItems(rows){return (rows||[]).filter(function(v){return v.url&&/^https:\/\//i.test(v.url)&&/\.(m3u8|mp4|mpd)(?:[?#]|$)/i.test(v.url);});}
 function registerScreen(){
- if(!Lampa.Component||!Lampa.Component.add||window.__XOT_COMPONENT_READY__)return false;
+ if(window.__XOT_COMPONENT_READY__)return true;
+ if(!Lampa.Component||!Lampa.Component.add||typeof window.jQuery!=='function')return false;
  window.__XOT_COMPONENT_READY__=true;
  Lampa.Component.add('xot_online',function(params){
+  var $=window.jQuery;
   var root=$('<div class="xot-screen" style="padding:1.5em 2em; min-height:70vh;"></div>'),card=params.movie||{},destroyed=false,serial=0,results=[],focusIndex=0;
   var sources=SOURCES.filter(function(s){return s.mode==='external';});
   function line(head,note,handler){var el=$('<div class="selector xot-line" tabindex="0" style="padding:1em;margin:.4em 0;border-radius:.6em;background:rgba(255,255,255,.08)"></div>');
@@ -166,7 +168,7 @@ function registerScreen(){
    var token=++serial;
    fetch(API_BASE+'/api/search?'+p.toString()).then(function(r){if(!r.ok)throw Error(String(r.status));return r.json();}).then(function(j){if(!destroyed&&serial===token)draw(j);}).catch(function(e){console.warn('[XOT] search',e);if(!destroyed&&serial===token)draw({results:[]});});
   }
-  this.create=function(){search();};
+  this.create=function(){};
   this.start=function(){search();};
   this.render=function(){return root;};
   this.pause=function(){};
