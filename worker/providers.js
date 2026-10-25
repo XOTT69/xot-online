@@ -8,7 +8,7 @@ async function getKodikToken(env){
  const response=await fetch('https://kodik-add.com/add-players.min.js?v=2',{signal:AbortSignal.timeout(5500)});
  if(!response.ok)throw new Error('kodik_public_token_unavailable');
  const script=await response.text();
- const match=script.match(/token\\s*[=:]\\s*["']([0-9a-f]+)["']/i);
+ const match=script.match(/token\s*[=:]\s*["']([0-9a-f]+)["']/i);
  if(!match)throw new Error('kodik_public_token_not_found');
  publicTokenCache={value:match[1],expires:Date.now()+30*60*1000};
  return match[1];
