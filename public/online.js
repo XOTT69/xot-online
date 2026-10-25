@@ -123,15 +123,66 @@ function searchAll(card,sourceId){
    });
  }).catch(function(err){console.warn('[XOT] API search',err);notify('ХОТ: помилка серверного пошуку');});
 }
+function safeText(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
+function playerItems(rows){return (rows||[]).filter(function(v){return v.url&&/^https:\/\//i.test(v.url)&&/\.(m3u8|mp4|mpd)(?:[?#]|$)/i.test(v.url);});}
+function registerScreen(){
+ if(!Lampa.Component||!Lampa.Component.add||window.__XOT_COMPONENT_READY__)return false;
+ window.__XOT_COMPONENT_READY__=true;
+ Lampa.Component.add('xot_online',function(params){
+  var root=$('<div class="xot-screen" style="padding:1.5em 2em; min-height:70vh;"></div>'),card=params.movie||{},destroyed=false,serial=0,results=[],focusIndex=0;
+  var sources=SOURCES.filter(function(s){return s.mode==='external';});
+  function line(head,note,handler){var el=$('<div class="selector xot-line" tabindex="0" style="padding:1em;margin:.4em 0;border-radius:.6em;background:rgba(255,255,255,.08)"></div>');
+   $('<div style="font-size:1.1em"></div>').text(head).appendTo(el);
+   if(note)$('<div style="opacity:.65;font-size:.8em"></div>').text(note).appendTo(el);
+   el.on('hover:enter click',handler);root.append(el);
+   return el;
+  }
+  function heading(text){root.append($('<div style="font-size:1.5em;margin:0 0 .8em"></div>').text(text));}
+  function mount(){try{if(Lampa.Scroll&&Lampa.Scroll){} }catch(e){} }
+  function draw(data){
+   if(destroyed)return;
+   root.empty();heading('ХОТ · '+title(card));
+   results=playerItems(data&&data.results);
+   if(results.length){
+    line('Знайдено потоків: '+results.length,'Обери відео для відтворення',function(){});
+    results.forEach(function(item){line(item.title+(item.episode?' · S'+(item.season||1)+'E'+item.episode:''),[item.source||item.provider,item.translation,item.quality].filter(Boolean).join(' · '),function(){
+     if(!Lampa.Player||!Lampa.Player.play)return notify('ХОТ: плеєр недоступний');
+     try{var p={url:item.url,title:item.title,quality:item.quality||'auto'};Lampa.Player.play(p);if(Lampa.Player.playlist)Lampa.Player.playlist([p]);}catch(e){notify('ХОТ: помилка відтворення');}
+    });});
+   }else{
+    line('Прямих потоків поки немає','Для Filmix і Rezka доступний резервний онлайн-модуль',function(){});
+   }
+   line('Джерела через Online MOD','Вибери джерело нижче',function(){});
+   sources.forEach(function(source){line(source.title,source.description,function(){chooseQuery(card,source);});});
+   var wait=SOURCES.filter(function(s){return s.mode==='pending';});
+   if(wait.length)line('Інші джерела ще не підключені',wait.map(function(s){return s.title;}).join(', '),function(){notify('ХОТ: для цих джерел потрібні робочі API відеопотоків');});
+   focusIndex=0;
+  }
+  function search(){
+   root.empty();heading('ХОТ · '+title(card));line('Шукаємо автоматично…','Перевіряємо підключені API',function(){});
+   var p=new URLSearchParams(),variants=uniqueTitles(card);p.set('title',title(card));variants.slice(1,8).forEach(function(v){p.append('alt',v);});
+   if(card.release_date||card.first_air_date)p.set('year',String(card.release_date||card.first_air_date).slice(0,4));
+   if(card.id)p.set('tmdb_id',String(card.id));
+   var token=++serial;
+   fetch(API_BASE+'/api/search?'+p.toString()).then(function(r){if(!r.ok)throw Error(String(r.status));return r.json();}).then(function(j){if(!destroyed&&serial===token)draw(j);}).catch(function(e){console.warn('[XOT] search',e);if(!destroyed&&serial===token)draw({results:[]});});
+  }
+  this.create=function(){search();};
+  this.start=function(){search();};
+  this.render=function(){return root;};
+  this.pause=function(){};
+  this.stop=function(){};
+  this.destroy=function(){destroyed=true;serial++;root.remove();};
+ });
+ return true;
+}
 function open(card){
  if(!card||!title(card))return notify('ХОТ: немає даних про фільм');
- select([{title:'Автопошук · усі доступні джерела',subtitle:'Знайти прямі потоки й відкрити в плеєрі Lampa',auto:true}].concat(SOURCES.map(function(s){return{title:s.title,subtitle:s.description,source:s};})),'ХОТ · Оберіть джерело',function(chosen){
-  if(!chosen)return;
-  if(chosen.auto)return searchAll(card);
-  if(!chosen.source)return;
-  if(chosen.source.mode==='pending')return searchAll(card,chosen.source.id);
-  chooseQuery(card,chosen.source);
- });
+ if(registerScreen()&&Lampa.Activity&&Lampa.Activity.push){
+  try{return Lampa.Activity.push({title:'ХОТ · '+title(card),component:'xot_online',movie:card,page:1});}
+  catch(error){console.warn('[XOT] screen',error);}
+ }
+ // Compatibility fallback when custom components are unavailable.
+ searchAll(card);
 }
 function button(e){
  var c=cardOf(e);if(c)lastCard=c;
@@ -142,6 +193,7 @@ function button(e){
  b.on('hover:enter click',function(){var current=activeCard()||lastCard;if(!current||!title(current))return notify('ХОТ: картка недоступна');open(current);});
  area.append(b);
 }
+if(Lampa.Component&&Lampa.Component.add)registerScreen();
 if(Lampa.Listener&&Lampa.Listener.follow)Lampa.Listener.follow('full',function(e){
  if(e&&['complite','complete','render'].indexOf(e.type)!==-1){
   setTimeout(function(){button(e);},0);
