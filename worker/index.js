@@ -17,7 +17,7 @@ export default {async fetch(request,env){
  if(url.pathname==='/api/filmix')return handleFilmix(request,env);
  if(request.method==='OPTIONS')return new Response(null,{status:204,headers:{...headers,'access-control-allow-methods':'GET, OPTIONS'}});
  if(request.method!=='GET')return json({error:'method_not_allowed'},405);
- if(url.pathname==='/api/health')return json({ok:true,service:'xot-online',provider_count:providers.filter(p=>!p.enabled||p.enabled(env)).length});
+ if(url.pathname==='/api/health')return json({ok:true,service:'xot-online',provider_count:providers.filter(p=>!p.enabled||p.enabled(env)).length,features:{filmix_device_flow:true}});
  if(url.pathname==='/api/providers')return json({providers:providers.map(p=>({id:p.id,name:p.name,enabled:!p.enabled||p.enabled(env)}))});
  if(url.pathname==='/api/query-plan'||url.pathname==='/api/search'){
   const query=getQuery(url);if(!check(query))return json({error:'invalid_query'},400);
