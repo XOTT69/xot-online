@@ -1,3 +1,4 @@
+import {handleFilmix} from './filmix.js';
 import {providers,normalize} from './providers.js';
 import {buildQueries,matchScore} from './matching.js';
 const headers={'content-type':'application/json; charset=utf-8','cache-control':'no-store','access-control-allow-origin':'*','x-content-type-options':'nosniff'};
@@ -13,6 +14,7 @@ function getQuery(url){return {title:(url.searchParams.get('title')||'').trim(),
 function check(q){return ((q.title && q.title.length<=200)||/^\d{1,12}$/.test(q.tmdb_id))&&(!q.year||/^\d{4}$/.test(q.year));}
 export default {async fetch(request,env){
  const url=new URL(request.url);
+ if(url.pathname==='/api/filmix')return handleFilmix(request,env);
  if(request.method==='OPTIONS')return new Response(null,{status:204,headers:{...headers,'access-control-allow-methods':'GET, OPTIONS'}});
  if(request.method!=='GET')return json({error:'method_not_allowed'},405);
  if(url.pathname==='/api/health')return json({ok:true,service:'xot-online',provider_count:providers.filter(p=>!p.enabled||p.enabled(env)).length});
