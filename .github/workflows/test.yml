@@ -1,0 +1,23 @@
+name: XOT test suite
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: JavaScript syntax and tests
+        run: |
+          node --check public/online.js
+          node --check online.js
+          node --check worker/filmix.js
+          node --check worker/index.js
+          npm test
