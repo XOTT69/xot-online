@@ -5,7 +5,7 @@ function json(data,status=200){return new Response(JSON.stringify(data),{status,
 function safeError(error){
  const msg=String(error&&error.message||'unknown');
  if(/^kodik_(public_token_unavailable|public_token_not_found|bad_response)$/.test(msg))return msg;
- if(/^kodik_http_\\d{3}$/.test(msg))return msg;
+ if(/^kodik_http_\d{3}$/.test(msg))return msg;
  if(/timeout|abort/i.test(msg))return 'upstream_timeout';
  return 'upstream_request_failed';
 }
