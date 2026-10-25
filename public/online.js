@@ -35,7 +35,7 @@ function select(items,heading,done){
  }catch(error){console.error('[XOT] select',error);notify('ХОТ: помилка відкриття меню');}
 }
 function modReady(){try{return !!(Lampa.SettingsApi&&Lampa.SettingsApi.getComponent&&Lampa.SettingsApi.getComponent('online_mod'))||window.__XOT_MOD_LOADED===true;}catch(e){return window.__XOT_MOD_LOADED===true;}}
-function launchBalancer(card,src){
+function launchBalancer(card,src,query){
  if(!Lampa.Activity||!Lampa.Activity.push)return notify('ХОТ: Online MOD не підтримується цією версією Lampa');
  storageSet('online_mod_balanser',src.id);
  try{
@@ -44,17 +44,17 @@ function launchBalancer(card,src){
    saved[card.id]=src.id;storageSet('online_mod_last_balanser',saved);
   }
  }catch(e){console.warn('[XOT] preference',e);}
- try{Lampa.Activity.push({url:'',title:'ХОТ · '+src.title,component:'online_mod',search:title(card),search_one:card.title||card.name||title(card),search_two:card.original_title||card.original_name||'',movie:card,page:1});}
+ try{Lampa.Activity.push({url:'',title:'ХОТ · '+src.title,component:'online_mod',search:query||title(card),search_one:query||title(card),search_two:card.original_title||card.original_name||'',movie:card,page:1});}
  catch(e){console.error('[XOT]',e);notify('ХОТ: не вдалося відкрити '+src.title);}
 }
-function external(card,src){
- if(modReady())return launchBalancer(card,src);
- pending={card:card,source:src};
+function external(card,src,query){
+ if(modReady())return launchBalancer(card,src,query);
+ pending={card:card,source:src,query:query};
  if(loading)return notify('ХОТ: зовнішній модуль завантажується');
  function load(){
   loading=true;notify('ХОТ: завантажуємо Online MOD...');
   var script=document.createElement('script');script.src=MOD_URL;script.async=true;
-  script.onload=function(){loading=false;if(!modReady()){pending=null;return notify('ХОТ: Online MOD не ініціалізувався');}window.__XOT_MOD_LOADED=true;var selected=pending;pending=null;if(selected)launchBalancer(selected.card,selected.source);};
+  script.onload=function(){loading=false;if(!modReady()){pending=null;return notify('ХОТ: Online MOD не ініціалізувався');}window.__XOT_MOD_LOADED=true;var selected=pending;pending=null;if(selected)launchBalancer(selected.card,selected.source,selected.query);};
   script.onerror=function(){loading=false;pending=null;notify('ХОТ: не вдалося завантажити Online MOD');};
   (document.head||document.documentElement).appendChild(script);
  }
@@ -65,11 +65,20 @@ function external(card,src){
   storageSet(CONSENT,true);load();
  });
 }
+function chooseQuery(card,source){
+ var candidates=[];
+ function add(value,label){value=String(value||'').trim();if(value&&!candidates.some(function(c){return c.query.toLowerCase()===value.toLowerCase();}))candidates.push({title:value,subtitle:label,query:value});}
+ add(card.title||card.name,'Назва у Lampa');
+ add(card.original_title||card.original_name,'Оригінальна назва');
+ if(card.alternative_titles&&card.alternative_titles.results)card.alternative_titles.results.slice(0,6).forEach(function(v){add(v.title,'Альтернативна назва');});
+ if(candidates.length<=1)return external(card,source,title(card));
+ select(candidates,'ХОТ · '+source.title+' · Варіант пошуку',function(selected){if(selected&&selected.query)external(card,source,selected.query);});
+}
 function open(card){
  if(!card||!title(card))return notify('ХОТ: немає даних про фільм');
  select(SOURCES.map(function(s){return{title:s.title,subtitle:s.description,source:s};}),'ХОТ · Оберіть джерело',function(chosen){
   if(!chosen||!chosen.source)return;
-  external(card,chosen.source);
+  chooseQuery(card,chosen.source);
  });
 }
 function button(e){
