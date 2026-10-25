@@ -13,7 +13,34 @@ async function getKodikToken(env){
  publicTokenCache={value:match[1],expires:Date.now()+30*60*1000};
  return match[1];
 }
-export const providers=[{
+const STREAM_EXT=/\\.(m3u8|mp4|mpd)(?:[?#]|$)/i;
+function validMedia(url){try{const u=new URL(url);return u.protocol==='https:'&&STREAM_EXT.test(u.pathname);}catch(e){return false;}}
+const catalogProvider={
+ id:'catalog',name:'XOT Catalog',
+ enabled(env){return Boolean(env&&env.XOT_CATALOG_URL);},
+ async search(query,env){
+  if(!this.enabled(env))return [];
+  const endpoint=new URL(env.XOT_CATALOG_URL);
+  if(endpoint.protocol!=='https:')throw new Error('catalog_invalid_endpoint');
+  endpoint.searchParams.set('title',query.title);
+  if(query.year)endpoint.searchParams.set('year',query.year);
+  if(query.tmdb_id)endpoint.searchParams.set('tmdb_id',query.tmdb_id);
+  const response=await fetch(endpoint.toString(),{headers:{accept:'application/json'},signal:AbortSignal.timeout(5500)});
+  if(!response.ok)throw new Error('catalog_http_'+response.status);
+  const payload=await response.json();
+  const rows=Array.isArray(payload)?payload:payload.results;
+  if(!Array.isArray(rows))throw new Error('catalog_invalid_response');
+  return rows.slice(0,80).filter(x=>x&&validMedia(x.url)).map(x=>({
+   title:String(x.title||query.title).slice(0,200),
+   year:x.year||null,id:String(x.id||'').slice(0,128),
+   url:x.url,translation:String(x.translation||'').slice(0,80),
+   quality:String(x.quality||'auto').slice(0,30),
+   season:Number(x.season)||null,episode:Number(x.episode)||null,
+   source:String(x.source||'catalog').slice(0,40)
+  }));
+ }
+};
+export const providers=[catalogProvider,{
  id:'kodik',name:'Kodik',
  enabled(){return true;},
  async search(query,env){
@@ -37,5 +64,5 @@ export const providers=[{
 }];
 export function normalize(item,provider){
  if(!item||typeof item!=='object'||!item.title)return null;
- return {provider:provider.id,title:String(item.title).slice(0,200),year:item.year||null,id:item.id||null};
+ return {provider:provider.id,title:String(item.title).slice(0,200),year:item.year||null,id:item.id||null,url:item.url||null,translation:item.translation||null,quality:item.quality||null,season:item.season||null,episode:item.episode||null,source:item.source||null};
 }
