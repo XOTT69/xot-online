@@ -7,12 +7,6 @@ var lastCard=null,loading=false,pending=null;
 try { var theme=document.querySelector('meta[name="theme-color"]'); if (!theme) { theme=document.createElement('meta');theme.setAttribute('name','theme-color');document.head.appendChild(theme); } theme.setAttribute('content','#171717'); } catch(e) {}
 var MOD_URL='https://cdn.jsdelivr.net/gh/nb557/plugins@851bcc9bc064ac06dc2b0e7ff6631baba61be511/online_mod.js';
 var CONSENT='xot_online_mod_consent_v1';
-// Keep the external component's source fixed for this movie. Filter lists remain owned by Online MOD.
-function markSourcePanel(){
- try{var style=document.getElementById('xot-hide-switcher');if(!style){style=document.createElement('style');style.id='xot-hide-switcher';style.textContent='body.xot-source-focused .filter--sort{display:none!important}';document.head.appendChild(style);}document.body.classList.add('xot-source-focused');}catch(e){console.warn('[XOT] Source UI:',e);}
-}
-function unmarkSourcePanel(){try{document.body.classList.remove('xot-source-focused');}catch(e){}}
-
 var SOURCES=[
  {id:'filmix',title:'Filmix',description:'Online MOD · якість залежить від акаунта',mode:'external'},
  {id:'rezka2',title:'HDRezka',description:'Online MOD · доступ залежить від мережі',mode:'external'},
@@ -52,7 +46,7 @@ function launchBalancer(card,src,query){
    storageSet('online_mod_last_balanser',saved);
   }
  }catch(e){console.warn('[XOT] preference',e);}
- markSourcePanel();
+
  try{Lampa.Activity.push({url:'',title:'ХОТ · '+src.title,component:'online_mod',search:query||title(card),search_one:query||title(card),search_two:card.original_title||card.original_name||'',movie:card,page:1});}
  catch(e){console.error('[XOT]',e);notify('ХОТ: не вдалося відкрити '+src.title);}
 }
@@ -91,7 +85,6 @@ function open(card){
  });
 }
 function button(e){
- unmarkSourcePanel();
  var c=cardOf(e);if(c)lastCard=c;
  if(typeof window.jQuery!=='function')return;
  var $=window.jQuery,area=$('.full-start-new__buttons, .full-start__buttons').first();if(!area.length)return;
