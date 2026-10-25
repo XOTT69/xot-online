@@ -89,3 +89,13 @@ test('Filmix health probe never forwards any saved account token',async()=>{
   assert.ok(!endpoint.includes('sensitive_account_token'));
  }finally{globalThis.fetch=old;}
 });
+
+test('Filmix dictionary playlist retains non-consecutive episode numbers',()=>{
+ const post={title:'Series',player_links:{playlist:{'1':{'UA':{
+  '5':{link:'https://video.example/episode5_[720,480].mp4'},
+  '2':{link:'https://video.example/episode2_[720,480].mp4'}
+ }}}}};
+ const rows=flattenFilmixPost(post,480);
+ assert.deepEqual(rows.map(x=>x.episode),[2,5]);
+ assert.equal(rows[0].season,1);
+});
