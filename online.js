@@ -14,8 +14,8 @@ var SOURCES=[
  {id:'cdnvideohub',title:'CDNVideoHub',description:'Online MOD',mode:'external'},
  {id:'anilibria2',title:'AniLibria',description:'Online MOD · аніме',mode:'external'},
  {id:'uafilm',title:'UAFILM',description:'UA · очікує API для Lampa',mode:'pending',domain:'uafilm.me'},
- {id:'uaserials',title:'UASerials',description:'Український каталог · вебпошук',mode:'web',domain:'uaserials.com'},
- {id:'uakino',title:'UAKino',description:'Український каталог · вебпошук',mode:'web',domain:'uakino.eu'}
+ {id:'uaserials',title:'UASerials',description:'UA · очікує API для Lampa',mode:'pending',domain:'uaserials.com'},
+ {id:'uakino',title:'UAKino',description:'UA · очікує API для Lampa',mode:'pending',domain:'uakino.eu'}
 ];
 function notify(s){if(Lampa.Noty&&Lampa.Noty.show)Lampa.Noty.show(s);else console.log('[XOT]',s);}
 function title(c){return(c&&(c.title||c.name||c.original_title||c.original_name))||'';}
@@ -91,10 +91,33 @@ function showHelp(source){
 function openCatalog(card,source){
  notify('ХОТ: '+source.title+' — інтеграція з плеєром ще не підключена. Веббраузер не відкриваємо.');
 }
+function searchAll(card){
+ if(!window.fetch)return notify('ХОТ: браузер не підтримує мережеві запити');
+ var urls=uniqueTitles(card);
+ var p=new URLSearchParams();
+ p.set('title',title(card));
+ urls.slice(1,8).forEach(function(q){p.append('alt',q);});
+ if(card.release_date||card.first_air_date)p.set('year',String(card.release_date||card.first_air_date).slice(0,4));
+ if(card.id)p.set('tmdb_id',String(card.id));
+ notify('ХОТ: шукаємо доступні потоки…');
+ fetch(API_BASE+'/api/search?'+p.toString()).then(function(resp){if(!resp.ok)throw Error('API '+resp.status);return resp.json();}).then(function(data){
+  var ready=(data.results||[]).filter(function(x){return x.url&&/^https:\/\//.test(x.url)&&/\.(m3u8|mp4|mpd)(?:[?#]|$)/i.test(x.url);});
+  if(!ready.length){notify('ХОТ: прямих потоків поки немає. Спробуй Filmix або Rezka через Online MOD.');return;}
+  select(ready.map(function(item){return {title:item.title+(item.episode?' · S'+item.season+'E'+item.episode:''),subtitle:[item.source||item.provider,item.translation,item.quality].filter(Boolean).join(' · '),item:item};}),
+   'ХОТ · Знайдені відео',function(choice){
+    if(!choice||!choice.item)return;
+    if(!Lampa.Player||!Lampa.Player.play)return notify('ХОТ: плеєр Lampa недоступний');
+    var f=choice.item;
+    try{Lampa.Player.play({url:f.url,title:f.title,quality:'auto',season:f.season,episode:f.episode});}catch(e){notify('ХОТ: помилка запуску відео');}
+   });
+ }).catch(function(err){console.warn('[XOT] API search',err);notify('ХОТ: помилка серверного пошуку');});
+}
 function open(card){
  if(!card||!title(card))return notify('ХОТ: немає даних про фільм');
- select(SOURCES.map(function(s){return{title:s.title,subtitle:s.description,source:s};}),'ХОТ · Оберіть джерело',function(chosen){
-  if(!chosen||!chosen.source)return;
+ select([{title:'Автопошук · усі доступні джерела',subtitle:'Знайти прямі потоки й відкрити в плеєрі Lampa',auto:true}].concat(SOURCES.map(function(s){return{title:s.title,subtitle:s.description,source:s};}))),'ХОТ · Оберіть джерело',function(chosen){
+  if(!chosen)return;
+  if(chosen.auto)return searchAll(card);
+  if(!chosen.source)return;
   if(chosen.source.mode==='pending')return openCatalog(card,chosen.source);
   chooseQuery(card,chosen.source);
  });
