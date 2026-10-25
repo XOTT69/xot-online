@@ -82,7 +82,6 @@ export async function handleFilmix(request,env){
  if(!['probe','pair','confirm','search','post','profile'].includes(action))return reply({error:'invalid_action'},400);
  const temporary=limit(input.temp_token,270);
  if(temporary&&!TOKEN.test(temporary))return reply({error:'invalid_temporary_token'},400);
- if(action==='confirm'&&!temporary)return reply({error:'temporary_token_required'},400);
  let route='',params={};
  if(action==='pair'||action==='confirm')route='token_request';
  if(action==='probe')route='check_update';
@@ -113,11 +112,12 @@ export async function handleFilmix(request,env){
   if(action==='profile')return reply({linked:Boolean(token),pro:Boolean(response&&response.is_pro),pro_plus:Boolean(response&&response.is_pro_plus)});
   let cap=480;
   if(token){
-   cap=720;
+   cap=480;
    try{
     const profile=await call(env&&env.FILMIX_API_BASE,'user_profile',device,token,{});
     if(profile&&profile.is_pro_plus)cap=2160;
     else if(profile&&profile.is_pro)cap=1080;
+    else if(profile&&profile.login)cap=720;
    }catch(e){/* A valid token without Pro verification never raises the quality cap. */}
   }
   return reply({title:limit(response&&response.title,200),items:flattenFilmixPost(response,cap)});
