@@ -13,7 +13,7 @@ var SOURCES=[
  {id:'kodik',title:'Kodik',description:'Online MOD · серіали',mode:'external'},
  {id:'cdnvideohub',title:'CDNVideoHub',description:'Online MOD',mode:'external'},
  {id:'anilibria2',title:'AniLibria',description:'Online MOD · аніме',mode:'external'},
- {id:'uafilm',title:'UAFILM',description:'Український каталог · вебпошук',mode:'web',domain:'uafilm.me'},
+ {id:'uafilm',title:'UAFILM',description:'UA · очікує API для Lampa',mode:'pending',domain:'uafilm.me'},
  {id:'uaserials',title:'UASerials',description:'Український каталог · вебпошук',mode:'web',domain:'uaserials.com'},
  {id:'uakino',title:'UAKino',description:'Український каталог · вебпошук',mode:'web',domain:'uakino.eu'}
 ];
@@ -89,24 +89,13 @@ function showHelp(source){
  select([{title:'Пошук за іншою назвою',subtitle:'Повернутися до вибору назви',action:'query'},{title:'Інформація',subtitle:info,action:'info'}],'ХОТ · '+source.title+' · Діагностика',function(v){if(v&&v.action==='query'){var card=activeCard()||lastCard;if(card)chooseQuery(card,source);}else notify(info);});
 }
 function openCatalog(card,source){
- var queries=uniqueTitles(card);
- if(!queries.length)return notify('ХОТ: немає назви для пошуку');
- var opts=queries.map(function(q){return {title:q,subtitle:'Пошук на сайті '+source.domain,query:q};});
- select(opts,'ХОТ · '+source.title+' · Каталог',function(selected){
-  if(!selected||!selected.query)return;
-  // An ordinary site-search link, not a stream or an unverified scraping endpoint.
-  var url='https://www.google.com/search?q='+encodeURIComponent('site:'+source.domain+' "'+selected.query+'"');
-  try{
-   var tab=window.open(url,'_blank','noopener,noreferrer');
-   if(!tab)notify('ХОТ: браузер заблокував нову вкладку');
-  }catch(error){console.warn('[XOT] Catalog navigation failed',error);notify('ХОТ: не вдалося відкрити вебпошук');}
- });
+ notify('ХОТ: '+source.title+' — інтеграція з плеєром ще не підключена. Веббраузер не відкриваємо.');
 }
 function open(card){
  if(!card||!title(card))return notify('ХОТ: немає даних про фільм');
  select(SOURCES.map(function(s){return{title:s.title,subtitle:s.description,source:s};}),'ХОТ · Оберіть джерело',function(chosen){
   if(!chosen||!chosen.source)return;
-  if(chosen.source.mode==='web')return openCatalog(card,chosen.source);
+  if(chosen.source.mode==='pending')return openCatalog(card,chosen.source);
   chooseQuery(card,chosen.source);
  });
 }
