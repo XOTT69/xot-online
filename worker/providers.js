@@ -13,7 +13,7 @@ async function getKodikToken(env){
  publicTokenCache={value:match[1],expires:Date.now()+30*60*1000};
  return match[1];
 }
-const STREAM_EXT=/\\.(m3u8|mp4|mpd)(?:[?#]|$)/i;
+const STREAM_EXT=/\.(m3u8|mp4|mpd)(?:[?#]|$)/i;
 function validMedia(url){try{const u=new URL(url);return u.protocol==='https:'&&STREAM_EXT.test(u.pathname);}catch(e){return false;}}
 const catalogProvider={
  id:'catalog',name:'XOT Catalog',
