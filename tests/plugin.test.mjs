@@ -31,4 +31,13 @@ test('UA providers do not open a browser and report pending player integration',
 
 
 test('custom screen registered and opened from movie card',()=>{assert.match(plugin,/Lampa\.Component\.add\('xot_online'/);assert.match(plugin,/component:'xot_online'/);});
-test('auto lookup starts from screen and does not navigate to a browser',()=>{assert.match(plugin,/function search\(\)/);assert.match(plugin,/fetch\(API_BASE\+'\/api\/search\?'/);assert.doesNotMatch(plugin,/window\.open\(/);});
+test('auto lookup starts from screen and does not navigate to a browser',()=>{assert.match(plugin,/function filmixLookup\(\)/);assert.match(plugin,/function catalogLookup\(\)/);assert.match(plugin,/fetch\(API_BASE\+'\/api\/search\?'/);assert.doesNotMatch(plugin,/window\.open\(/);});
+
+test('Filmix independently pairs, searches and opens native Lampa streams',()=>{
+ assert.match(plugin,/function filmixRequest\(/);
+ assert.match(plugin,/filmixRequest\('pair'/);
+ assert.match(plugin,/filmixRequest\('confirm'/);
+ assert.match(plugin,/filmixRequest\('search'/);
+ assert.match(plugin,/filmixRequest\('post'/);
+ assert.match(plugin,/Lampa\.Player\.play\(p\)/);
+});
