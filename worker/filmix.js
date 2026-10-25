@@ -97,7 +97,15 @@ export async function handleFilmix(request,env){
    return reply({results:found.slice(0,45).filter(x=>x&&Number.isInteger(Number(x.id))).map(x=>({id:x.id,title:limit(x.title,200),original_title:limit(x.original_title,200),year:Number(x.year)||null,series:Number(x.section)===7}))});
   }
   if(action==='profile')return reply({linked:Boolean(token),pro:Boolean(response&&response.is_pro),pro_plus:Boolean(response&&response.is_pro_plus)});
-  const cap=!token?480:input.plan==='pro_plus'?2160:input.plan==='pro'?1080:720;
+  let cap=480;
+  if(token){
+   cap=720;
+   try{
+    const profile=await call(env&&env.FILMIX_API_BASE,'user_profile',device,token,{});
+    if(profile&&profile.is_pro_plus)cap=2160;
+    else if(profile&&profile.is_pro)cap=1080;
+   }catch(e){/* A valid token without Pro verification never raises the quality cap. */}
+  }
   return reply({title:limit(response&&response.title,200),items:flattenFilmixPost(response,cap)});
  }catch(e){return reply({error:err(e)},502);}
 }
