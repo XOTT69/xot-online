@@ -29,4 +29,6 @@ test('UA providers do not open a browser and report pending player integration',
  assert.doesNotMatch(plugin,/window\.open\(|www\.google\.com\/search/);
 });
 
-test('XOT menu parses and passes heading to select',()=>{assert.match(plugin,/source:s;\}\)\),'ХОТ · Оберіть джерело'/);assert.doesNotMatch(plugin,/source:s;\}\)\)\),'ХОТ · Оберіть джерело'/);});
+
+test('custom screen registered and opened from movie card',()=>{assert.match(plugin,/Lampa\.Component\.add\('xot_online'/);assert.match(plugin,/component:'xot_online'/);});
+test('auto lookup starts from screen and does not navigate to a browser',()=>{assert.match(plugin,/function search\(\)/);assert.match(plugin,/fetch\(API_BASE\+'\/api\/search\?'/);assert.doesNotMatch(plugin,/window\.open\(/);});
