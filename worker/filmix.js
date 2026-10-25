@@ -4,10 +4,11 @@
 const DEFAULT_API='https://filmixapp.cyou/api/v2/';
 const DEVICE=/^[a-zA-Z0-9_-]{12,64}$/;
 const TOKEN=/^[a-zA-Z0-9._-]{1,256}$/;
-const mediaURL=/^https?:\/\/[^/\s]+\/\S+\.(?:mp4|m3u8)(?:[?#].*)?$/i;
+const mediaURL=/^https:\/\/[^/\s]+\/\S+\.(?:mp4|m3u8)(?:[?#].*)?$/i;
 const common={'content-type':'application/json; charset=utf-8','cache-control':'no-store','access-control-allow-origin':'*','access-control-allow-methods':'POST, OPTIONS','access-control-allow-headers':'Content-Type','x-content-type-options':'nosniff'};
 function reply(data,status=200){return new Response(JSON.stringify(data),{status,headers:common});}
 function limit(v,max){return String(v||'').trim().slice(0,max);}
+function activePlan(value){return value===true||value===1||value==='1'||value==='true';}
 function safeURL(api,path,device,token,extra={}){
  const base=new URL(api||DEFAULT_API);
  if(base.protocol!=='https:'||base.hostname!=='filmixapp.cyou')throw new Error('filmix_https_required');
@@ -111,14 +112,14 @@ export async function handleFilmix(request,env){
    const found=Array.isArray(response)?response:Array.isArray(response&&response.results)?response.results:[];
    return reply({results:found.slice(0,45).filter(x=>x&&Number.isInteger(Number(x.id))).map(x=>({id:x.id,title:limit(x.title,200),original_title:limit(x.original_title,200),year:Number(x.year)||null,series:Number(x.section)===7}))});
   }
-  if(action==='profile')return reply({linked:Boolean(token),pro:Boolean(response&&response.is_pro),pro_plus:Boolean(response&&response.is_pro_plus)});
+  if(action==='profile')return reply({linked:Boolean(token),pro:activePlan(response&&response.is_pro),pro_plus:activePlan(response&&response.is_pro_plus)});
   let cap=480;
   if(token){
    cap=480;
    try{
     const profile=await call(env&&env.FILMIX_API_BASE,'user_profile',device,token,{});
-    if(profile&&profile.is_pro_plus)cap=2160;
-    else if(profile&&profile.is_pro)cap=1080;
+    if(activePlan(profile&&profile.is_pro_plus))cap=2160;
+    else if(activePlan(profile&&profile.is_pro))cap=1080;
     else if(profile&&profile.login)cap=720;
    }catch(e){/* A valid token without Pro verification never raises the quality cap. */}
   }
