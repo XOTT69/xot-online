@@ -5,7 +5,20 @@ window.__XOT_ONLINE_INITIALIZED__=true;
 var API_BASE=(function(){var ss=document.getElementsByTagName('script');for(var i=ss.length-1;i>=0;i--)if(ss[i].src&&/\/online\.js(?:\?|$)/.test(ss[i].src))return new URL(ss[i].src).origin;return location.origin;})();
 function notify(t){if(Lampa.Noty&&Lampa.Noty.show)Lampa.Noty.show(t);else console.log('[XOT]',t);}
 function title(c){return(c&&(c.title||c.name||c.original_title||c.original_name))||'';}
-function cardOf(e){return(e&&(e.data||(e.object&&e.object.card)||e.movie))||(Lampa.Activity&&Lampa.Activity.active&&Lampa.Activity.active().card)||null;}
+function unwrapCard(value){
+  if(!value||typeof value!=='object')return null;
+  var candidates=[value.card,value.movie,value.data&&value.data.movie,value.data&&value.data.card,value.object&&value.object.card,value.object&&value.object.movie,value.data,value];
+  for(var i=0;i<candidates.length;i++)if(candidates[i]&&title(candidates[i]))return candidates[i];
+  return null;
+}
+function activeCard(){
+  try{
+    var activity=Lampa.Activity&&Lampa.Activity.active&&Lampa.Activity.active();
+    return unwrapCard(activity)||unwrapCard(activity&&activity.params)||null;
+  }catch(e){return null;}
+}
+function cardOf(e){return unwrapCard(e)||activeCard();}
+var lastCard=null;
 function get(path){return fetch(API_BASE+path,{headers:{accept:'application/json'}}).then(function(r){if(!r.ok)throw Error('HTTP '+r.status);return r.json();});}
 function select(items,heading,done){
   if(!Lampa.Select||!Lampa.Select.show)return notify('ХОТ: меню вибору недоступне');
@@ -40,11 +53,21 @@ function open(card){
   }).catch(function(e){console.warn('[XOT]',e);notify('ХОТ: API або джерело недоступні');});
 }
 function button(e){
-  var c=cardOf(e);if(!c||typeof window.jQuery!=='function')return;
+  var c=cardOf(e);if(c)lastCard=c;
+  if(typeof window.jQuery!=='function')return;
   var $=window.jQuery;var area=$('.full-start-new__buttons, .full-start__buttons').first();
-  if(!area.length||area.find('.xot-online-button').length)return;
+  if(!area.length)return;
+  // Recreate on new card, avoiding stale closures.
+  area.find('.xot-online-button').remove();
   var b=$('<div class="full-start__button selector xot-online-button" tabindex="0"><span>ХОТ</span></div>');
-  b.on('hover:enter click',function(){open(c);});area.append(b);
+  b.on('hover:enter click',function(){
+    var current=activeCard()||lastCard;
+    if(!current||!title(current)){
+      console.warn('[XOT] Card not found; Lampa active activity',Lampa.Activity&&Lampa.Activity.active&&Lampa.Activity.active());
+      return notify('ХОТ: дані картки недоступні');
+    }
+    open(current);
+  });area.append(b);
 }
 if(Lampa.Listener&&Lampa.Listener.follow)Lampa.Listener.follow('full',function(e){if(e&&['complite','complete','render'].indexOf(e.type)!==-1)setTimeout(function(){button(e);},0);});
 console.info('[XOT] Loaded with Internet Archive provider support');
