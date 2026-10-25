@@ -55,3 +55,5 @@ https://xot-online.<your-subdomain>.workers.dev/m.js
 ## Після змін у GitHub
 
 Зробіть новий деплой у Cloudflare (автодеплой за підключеним GitHub або `npm run deploy`). Перевірте `/api/health`: очікується `provider_count: 1`. Натисніть **ХОТ** у картці відповідного відео. Якщо метадані Archive не містять сумісного відео, плагін чесно повідомить про відсутність варіантів. Кнопка в Lampa не означає, що джерело гарантує відтворення.
+
+<!-- Trigger Cloudflare Git integration build for provider update (2026-10-25). -->
