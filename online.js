@@ -152,7 +152,7 @@ function registerScreen(){
  window.__XOT_COMPONENT_READY__=true;
  Lampa.Component.add('xot_online',function(params){
   var $=window.jQuery,card=params.movie||{},root=$('<div class="xot-screen" style="padding:1.2em 2em 3em;min-height:70vh;overflow:auto;max-height:85vh"></div>');
-  var destroyed=false,started=false,serial=0,filmix=[],catalog=[],filmixLoading=false,catalogLoading=false,errorFilmix='',view='home',selected=null,lastFocus=null,pairing=null;
+  var destroyed=false,started=false,serial=0,filmix=[],catalog=[],filmixLoading=false,catalogLoading=false,errorFilmix='',view='home',selected=null,lastFocus=null,pairing=null,streamChoice={season:null,episode:null,voice:null};
   function text(s){return String(s==null?'':s);}
   function readableError(code){var errors={filmix_unavailable:'Не вдалося з’єднатися з Filmix API через HTTPS',filmix_timeout:'Filmix API не відповів вчасно',filmix_http_401:'Filmix відхилив авторизацію пристрою',filmix_http_403:'Доступ до Filmix API обмежено',filmix_http_404:'Адреса Filmix API змінилася',filmix_https_required:'Безпечне HTTPS-з’єднання недоступне',filmix_invalid_json:'Filmix повернув невідомий формат відповіді'};return errors[code]||code||'невідома помилка';}
   function line(head,note,action){
@@ -204,13 +204,51 @@ function registerScreen(){
     if(Lampa.Player.playlist)Lampa.Player.playlist([p]);
    }catch(e){console.warn('[XOT] play',e);notify('ХОТ: не вдалося запустити відео');}
   }
+  function streamBack(){
+   if(streamChoice.voice!==null)streamChoice.voice=null;
+   else if(streamChoice.episode!==null)streamChoice.episode=null;
+   else if(streamChoice.season!==null)streamChoice.season=null;
+   else view='home';
+   render();
+  }
   function drawStreams(){
+   var all=selected&&selected.items||[];
    header('Filmix · '+(selected&&selected.title||title(card)));
-   line('Назад до результатів','',function(){view='home';render();});
-   var items=selected&&selected.items||[];
-   if(!items.length)line('Потоки відсутні','Можливо, потрібна авторизація або інша озвучка',function(){});
-   items.forEach(function(item){
-    line([item.season?'S'+item.season+'E'+item.episode:'Фільм',item.translation,item.quality].filter(Boolean).join(' · '),'Відтворити у вбудованому плеєрі Lampa',function(){play(item);});
+   line('Назад','Попередній крок або результати',streamBack);
+   if(!all.length){
+    line('Немає відтворюваних HTTPS-потоків','Перевір Filmix API, авторизацію й доступність відео',function(){});
+    focus();return;
+   }
+   var seasons=[...new Set(all.filter(function(x){return x.season;}).map(function(x){return Number(x.season);}))]
+    .sort(function(a,b){return a-b;});
+   if(seasons.length&&streamChoice.season===null){
+    line('Обери сезон','Знайдено сезонів: '+seasons.length,function(){});
+    seasons.forEach(function(season){
+     line('Сезон '+season,'Відкрити список серій',function(){streamChoice.season=season;render();});
+    });
+    focus();return;
+   }
+   var scoped=all.filter(function(x){return streamChoice.season===null||Number(x.season)===streamChoice.season;});
+   if(seasons.length&&streamChoice.episode===null){
+    var episodes=[...new Set(scoped.map(function(x){return Number(x.episode);}).filter(Boolean))]
+      .sort(function(a,b){return a-b;});
+    line('Сезон '+streamChoice.season+' · обери серію','Знайдено серій: '+episodes.length,function(){});
+    episodes.forEach(function(episode){
+     line('Серія '+episode,'Вибрати озвучення',function(){streamChoice.episode=episode;render();});
+    });
+    focus();return;
+   }
+   if(streamChoice.episode!==null)scoped=scoped.filter(function(x){return Number(x.episode)===streamChoice.episode;});
+   if(streamChoice.voice===null){
+    var voices=[...new Set(scoped.map(function(x){return x.translation||'Оригінал';}))];
+    line('Обери озвучення','Доступно: '+voices.length,function(){});
+    voices.forEach(function(voice){line(voice,'Вибрати якість відео',function(){streamChoice.voice=voice;render();});});
+    focus();return;
+   }
+   scoped=scoped.filter(function(x){return (x.translation||'Оригінал')===streamChoice.voice;});
+   line((streamChoice.episode!==null?'Серія '+streamChoice.episode+' · ':'')+streamChoice.voice,'Обери якість відео',function(){});
+   scoped.forEach(function(item){
+    line(item.quality||'Авто','Відтворити у вбудованому плеєрі Lampa',function(){play(item);});
    });
    focus();
   }
@@ -249,7 +287,7 @@ function registerScreen(){
    header('Filmix · завантаження озвучень…');
    var token=++serial;
    filmixRequest('post',{id:item.id}).then(function(j){
-    if(destroyed||token!==serial)return;selected={title:item.title,items:j.items||[]};view='streams';render();
+    if(destroyed||token!==serial)return;selected={title:item.title,items:j.items||[]};streamChoice={season:null,episode:null,voice:null};view='streams';render();
    }).catch(function(e){if(destroyed||token!==serial)return;selected={title:item.title,items:[]};view='streams';render();notify('Filmix: '+e.message);});
   }
   function filmixLookup(){
@@ -283,7 +321,7 @@ function registerScreen(){
     Lampa.Controller.toggle('content');
    }
   };
-  this.back=function(){if(view!=='home'){view='home';render();}else if(Lampa.Activity&&Lampa.Activity.backward)Lampa.Activity.backward();};
+  this.back=function(){if(view==='streams')streamBack();else if(view!=='home'){view='home';render();}else if(Lampa.Activity&&Lampa.Activity.backward)Lampa.Activity.backward();};
   this.pause=function(){};
   this.stop=function(){};
   this.destroy=function(){destroyed=true;serial++;root.remove();};
