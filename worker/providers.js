@@ -15,6 +15,20 @@ async function getKodikToken(env){
 }
 const STREAM_EXT=/\.(m3u8|mp4|mpd)(?:[?#]|$)/i;
 function validMedia(url){try{const u=new URL(url);return u.protocol==='https:'&&STREAM_EXT.test(u.pathname);}catch(e){return false;}}
+const UA_SOURCES=[
+ {id:'uakino',name:'UAKino',env:'XOT_UAKINO_API_URL'},
+ {id:'uaserials',name:'UASerials',env:'XOT_UASERIALS_API_URL'},
+ {id:'uafilm',name:'UAFILM',env:'XOT_UAFILM_API_URL'},
+ {id:'filmix_api',name:'Filmix API',env:'XOT_FILMIX_API_URL'},
+ {id:'rezka_api',name:'Rezka API',env:'XOT_REZKA_API_URL'}
+];
+function uaProvider(source){
+ return {
+  id:source.id,name:source.name,
+  enabled(env){return Boolean(env&&env[source.env]);},
+  async search(query,env){return catalogProvider.search(query,{XOT_CATALOG_URL:env[source.env]});}
+ };
+}
 const catalogProvider={
  id:'catalog',name:'XOT Catalog',
  enabled(env){return Boolean(env&&env.XOT_CATALOG_URL);},
@@ -40,7 +54,7 @@ const catalogProvider={
   }));
  }
 };
-export const providers=[catalogProvider,{
+export const providers=[...UA_SOURCES.map(uaProvider),catalogProvider,{
  id:'kodik',name:'Kodik',
  enabled(){return true;},
  async search(query,env){
