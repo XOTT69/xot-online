@@ -250,10 +250,11 @@ function registerScreen(){
    filmixLoading=true;filmix=[];errorFilmix='';render();
    var token=++serial;
    var titles=uniqueTitles(card).slice(0,3);
-   Promise.all(titles.map(function(name){return filmixRequest('search',{title:name}).then(function(r){return r.results||[];});}))
+   Promise.all(titles.map(function(name){return filmixRequest('search',{title:name}).then(function(r){return {results:r.results||[]};}).catch(function(e){return {error:e.message};});}))
     .then(function(groups){
      if(destroyed||token!==serial)return;
-     var all=[].concat.apply([],groups),seen={};
+     var all=[].concat.apply([],groups.map(function(g){return g.results||[];})),seen={};
+     if(!all.length)errorFilmix=(groups.find(function(g){return g.error;})||{}).error||'';
      filmix=all.filter(function(item){if(seen[item.id]||!filmixMatched(item,card))return false;seen[item.id]=true;return true;});
      filmixLoading=false;render();
     }).catch(function(e){if(destroyed||token!==serial)return;errorFilmix='API: '+e.message;filmixLoading=false;render();});
