@@ -20,11 +20,11 @@ test('XOT launch path is available',()=>{
 
 test('upper balancer switcher remains available',()=>{assert.doesNotMatch(plugin,/xot-source-focused|xot-hide-switcher/);});
 
-test('Ukrainian catalogs are explicit website search, not invented streams',()=>{
+
+test('UA providers do not open a browser and report pending player integration',()=>{
  assert.match(plugin,/id:'uaserials'/);
  assert.match(plugin,/id:'uakino'/);
  assert.match(plugin,/id:'uafilm'/);
- assert.match(plugin,/mode:'web'/);
- assert.match(plugin,/function openCatalog\(/);
- assert.match(plugin,/site:/);
+ assert.match(plugin,/mode:'pending'/);
+ assert.doesNotMatch(plugin,/window\.open\(|www\.google\.com\/search/);
 });
