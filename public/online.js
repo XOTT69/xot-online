@@ -8,7 +8,7 @@ try { var theme=document.querySelector('meta[name="theme-color"]'); if (!theme) 
 var MOD_URL='https://cdn.jsdelivr.net/gh/nb557/plugins@851bcc9bc064ac06dc2b0e7ff6631baba61be511/online_mod.js';
 var CONSENT='xot_online_mod_consent_v1';
 var SOURCES=[
- {id:'filmix',title:'Filmix',description:'Online MOD · якість залежить від акаунта',mode:'external'},
+ {id:'filmix',title:'Filmix',description:'Вибір озвучення та якості через Online MOD',mode:'external'},
  {id:'rezka2',title:'HDRezka',description:'Online MOD · доступ залежить від мережі',mode:'external'},
  {id:'kodik',title:'Kodik',description:'Online MOD · серіали',mode:'external'},
  {id:'cdnvideohub',title:'CDNVideoHub',description:'Online MOD',mode:'external'},
@@ -44,7 +44,7 @@ function launchBalancer(card,src,query){
  storageSet('online_mod_balanser',src.id);
  // The upstream module can override the selected source with a saved per-film balancer.
  try{
-  if(card.id&&Lampa.Storage.cache){
+  if(card.id&&Lampa.Storage.field&&Lampa.Storage.field('online_mod_save_last_balanser')===true&&Lampa.Storage.cache){
    var saved=Lampa.Storage.cache('online_mod_last_balanser',200,{})||{};
    saved[card.id]=src.id;
    storageSet('online_mod_last_balanser',saved);
@@ -152,7 +152,7 @@ function registerScreen(){
  window.__XOT_COMPONENT_READY__=true;
  Lampa.Component.add('xot_online',function(params){
   var $=window.jQuery,card=params.movie||{},root=$('<div class="xot-screen" style="padding:1.2em 2em 3em;min-height:70vh;overflow:auto;max-height:85vh"></div>');
-  var destroyed=false,started=false,serial=0,filmix=[],catalog=[],filmixLoading=false,catalogLoading=false,errorFilmix='',view='home',selected=null,lastFocus=null,pairing=null,streamChoice={season:null,episode:null,voice:null};
+  var destroyed=false,started=false,serial=0,filmix=[],catalog=[],apiProviders=[],filmixLoading=false,catalogLoading=false,errorFilmix='',view='home',selected=null,lastFocus=null,pairing=null,streamChoice={season:null,episode:null,voice:null};
   function text(s){return String(s==null?'':s);}
   function readableError(code){var errors={filmix_unavailable:'Не вдалося з’єднатися з Filmix API через HTTPS',filmix_timeout:'Filmix API не відповів вчасно',filmix_http_401:'Filmix відхилив авторизацію пристрою',filmix_http_403:'Доступ до Filmix API обмежено',filmix_http_404:'Адреса Filmix API змінилася',filmix_https_required:'Безпечне HTTPS-з’єднання недоступне',filmix_invalid_json:'Filmix повернув невідомий формат відповіді'};return errors[code]||code||'невідома помилка';}
   function line(head,note,action){
@@ -170,30 +170,73 @@ function registerScreen(){
     try{Lampa.Controller.collectionSet(root,root);Lampa.Controller.collectionFocus(lastFocus||false,root);}catch(e){}
    }
   }
+
+  function section(label,description){
+   var wrapper=$('<div style="margin:1.4em 0 .4em"></div>');
+   $('<div style="font-size:1.16em;font-weight:600"></div>').text(label).appendTo(wrapper);
+   if(description)$('<div style="font-size:.79em;opacity:.68;margin-top:.2em"></div>').text(description).appendTo(wrapper);
+   root.append(wrapper);
+  }
+  function toolsView(){
+   header('Незалежні API · керування');
+   line('← Джерела','Повернутися до онлайн-джерел',function(){view='home';render();});
+   section('Filmix · власний адаптер','Експериментальний HTTPS API. Якщо він недоступний, користуйся Filmix через Online MOD.');
+   line('Знайти Filmix · '+(filmixLoading?'шукаємо…':filmix.length?'знайдено '+filmix.length:errorFilmix?'помилка API':'не перевірено'),
+    errorFilmix?readableError(errorFilmix):'Пошук за відомими назвами',function(){filmixLookup();});
+   filmix.forEach(function(item){
+    line(item.title+(item.year?' ('+item.year+')':''),'Обрати серію, озвучення та якість',function(){showFilmix(item);});
+   });
+   line('Прив’язати Filmix за кодом','Активація у власному акаунті filmix.gg/consoles',function(){beginPair();});
+   line('Перевірити HTTPS-з’єднання Filmix','Без передавання особистого токена',function(){
+    filmixRequest('probe',{device_token:''}).then(function(r){notify('Filmix: '+(r.status==='reachable'?'API відповідає':'незрозуміла відповідь'));})
+     .catch(function(e){notify('Filmix: '+readableError(e.message));});
+   });
+   if(storageGet('xot_filmix_device_token',''))line('Від’єднати Filmix','Видалити токен із локального сховища Lampa',function(){
+    storageSet('xot_filmix_device_token','');storageSet('xot_filmix_pending',null);filmix=[];errorFilmix='';render();
+   });
+   section('Інші API','Ці джерела працюють лише з налаштованим JSON API, який повертає відтворювані HTTPS-потоки');
+   apiProviders.forEach(function(p){
+    line(p.name+' · '+(p.enabled?'налаштовано':'не підключено'),
+     p.enabled?'Сервер має адресу API; доступність відео не підтверджена':
+      'Немає налаштованого незалежного API для цього джерела',function(){
+       if(p.enabled){catalogLookup();notify('ХОТ: повторний пошук '+p.name);}
+       else notify('ХОТ: '+p.name+' — потрібно налаштувати API у Worker');
+     });
+   });
+   if(!apiProviders.length)line('Стан серверних API невідомий','Список джерел ще не завантажено',function(){catalogLookup();});
+   section('Online MOD','Параметри адаптерів джерел, включно з авторизацією');
+   line('Налаштування Online MOD','Дзеркала, акаунти та балансери всередині Lampa',function(){
+    if(Lampa.Settings&&typeof Lampa.Settings.create==='function'&&modReady()){
+     try{Lampa.Settings.create('online_mod');}catch(e){notify('ХОТ: налаштування Online MOD недоступні');}
+    }else notify('Спершу відкрий будь-яке джерело та дозволь завантаження Online MOD');
+   });
+   line('Повторити пошук','Оновити незалежні результати',function(){filmixLookup();catalogLookup();});
+   focus();
+  }
   function render(){
    if(destroyed)return;
    lastFocus=null;
    if(view==='streams')return drawStreams();
    if(view==='pair')return drawPair();
-   header('Власний пошук джерел · незалежно від Online MOD');
-   line('Filmix · '+(filmixLoading?'пошук…':filmix.length?'знайдено '+filmix.length:'немає збігів'),errorFilmix||'Авторизація за кодом пристрою доступна нижче',function(){filmixLookup();});
-   filmix.forEach(function(item){line('Filmix · '+item.title+(item.year?' ('+item.year+')':''),item.original_title||'Натисни для вибору озвучення та якості',function(){showFilmix(item);});});
-   line('Прив’язати Filmix за кодом','Активувати пристрій на filmix.gg/consoles',function(){beginPair();});
-   line('Перевірити з’єднання Filmix','Діагностика HTTPS API без логіна й токена',function(){
-    notify('ХОТ: перевіряємо Filmix API…');
-    filmixRequest('probe',{device_token:''}).then(function(r){notify(r.status==='reachable'?'Filmix: HTTPS API відповідає':'Filmix: невідома відповідь API');})
-    .catch(function(e){notify('Filmix: '+readableError(e.message));});
+   if(view==='tools')return toolsView();
+   header('Обери джерело — пошук і перегляд усередині Lampa');
+   section('Онлайн-джерела','Адаптери з перевіреною в lampa69 інтеграцією Online MOD; їхня фактична доступність залежить від мережі й акаунтів');
+   SOURCES.filter(function(s){return s.mode==='external';}).forEach(function(source){
+    line(source.title,source.description+' · відкрити пошук',function(){external(card,source,title(card));});
    });
-   if(storageGet('xot_filmix_device_token',''))line('Filmix · від’єднати пристрій','Прибрати збережену авторизацію з цієї Lampa',function(){
-    storageSet('xot_filmix_device_token','');storageSet('xot_filmix_pending',null);filmixLookup();
+   section('Незалежний пошук','Власний API — лише коли повертає справжнє відео, без переходу на вебсайти');
+   if(catalogLoading)line('Шукаємо у підключених API…','Результати з’являться нижче',function(){});
+   catalog.forEach(function(item){
+    line((item.source||item.provider||'Каталог')+' · '+item.title,
+     [item.translation,item.quality,item.season?'S'+item.season+'E'+(item.episode||1):''].filter(Boolean).join(' · '),
+     function(){play(item);});
    });
-   if(catalogLoading)line('Інші підключені API · пошук…','Перевірка власного каталогу',function(){});
-   catalog.forEach(function(item){line((item.source||item.provider||'Каталог')+' · '+item.title,[item.translation,item.quality,item.season?'S'+item.season+'E'+(item.episode||1):''].filter(Boolean).join(' · '),function(){play(item);});});
-   if(!filmixLoading&&!catalogLoading&&!filmix.length&&!catalog.length)line('Доступних потоків поки немає','Якщо Filmix недоступний — перевір авторизацію або джерело API',function(){});
-   line('Інші джерела · налаштування','Rezka, UAKino, UASerials: окремі адаптери ще потребують підключення',function(){notify('ХОТ: для цих джерел ще немає незалежних робочих API');});
-   line('Резерв · Online MOD (необов’язково)','Відкрити сторонній модуль, якщо власне джерело недоступне',function(){
-    select(SOURCES.filter(function(x){return x.mode==='external';}).map(function(x){return{title:x.title,subtitle:x.description,source:x};}),'Резервний модуль',function(x){if(x&&x.source)external(card,x.source,title(card));});
+   if(!catalogLoading&&!catalog.length)line('Поки немає прямих потоків',
+    'Незалежні джерела без налаштованого API не видають фальшиві результати',function(){view='tools';render();});
+   line('Filmix · незалежний пошук (експеримент)',filmix.length?'Знайдено: '+filmix.length:'Окремо від Online MOD, може бути недоступний',function(){
+    view='tools';render();if(!filmix.length)filmixLookup();
    });
+   line('Налаштування джерел','Filmix за кодом, статус інших API, авторизація Online MOD',function(){view='tools';render();});
    focus();
   }
   function play(item){
@@ -305,6 +348,7 @@ function registerScreen(){
   }
   function catalogLookup(){
    catalogLoading=true;render();
+   fetch(API_BASE+'/api/providers').then(function(r){return r.json();}).then(function(j){if(destroyed)return;apiProviders=j.providers||[];if(view==='tools')render();}).catch(function(){});
    var p=new URLSearchParams(),v=uniqueTitles(card);p.set('title',title(card));v.slice(1,8).forEach(function(q){p.append('alt',q);});
    if(card.release_date||card.first_air_date)p.set('year',String(card.release_date||card.first_air_date).slice(0,4));
    if(card.id)p.set('tmdb_id',String(card.id));
@@ -315,13 +359,13 @@ function registerScreen(){
   this.create=function(){return root;};
   this.render=function(){return root;};
   this.start=function(){
-   if(!started){started=true;filmixLookup();catalogLookup();}
+   if(!started){started=true;catalogLookup();}
    if(Lampa.Controller&&Lampa.Controller.add){
     Lampa.Controller.add('content',{toggle:function(){focus();},up:function(){if(window.Navigator)Navigator.move('up');},down:function(){if(window.Navigator)Navigator.move('down');},left:function(){Lampa.Controller.toggle('menu');},right:function(){if(window.Navigator)Navigator.move('right');},back:this.back});
     Lampa.Controller.toggle('content');
    }
   };
-  this.back=function(){if(view==='streams')streamBack();else if(view!=='home'){view='home';render();}else if(Lampa.Activity&&Lampa.Activity.backward)Lampa.Activity.backward();};
+  this.back=function(){if(view==='streams')streamBack();else if(view!=='home'){view=view==='pair'?'tools':'home';render();}else if(Lampa.Activity&&Lampa.Activity.backward)Lampa.Activity.backward();};
   this.pause=function(){};
   this.stop=function(){};
   this.destroy=function(){destroyed=true;serial++;root.remove();};
