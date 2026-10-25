@@ -99,3 +99,21 @@ test('Filmix dictionary playlist retains non-consecutive episode numbers',()=>{
  assert.deepEqual(rows.map(x=>x.episode),[2,5]);
  assert.equal(rows[0].season,1);
 });
+
+test('Filmix never hands an HTTP-only video link to the secure Lampa player',()=>{
+ const items=flattenFilmixPost({title:'Example',player_links:{movie:[{translation:'Voice',link:'http://cdn.example/media_[1080,720,480].mp4'}]}},1080);
+ assert.deepEqual(items,[]);
+});
+test('Filmix profile string "false" does not grant a Pro tier',async()=>{
+ const old=globalThis.fetch;
+ try{
+  globalThis.fetch=async input=>{
+   const u=String(input);
+   if(u.includes('/user_profile'))return new Response(JSON.stringify({is_pro:'false',is_pro_plus:'false',login:'testuser'}));
+   if(u.includes('/post/'))return new Response(JSON.stringify({title:'Film',player_links:{movie:[{translation:'UA',link:'https://media.example/v_[1080,720,480].mp4'}]}}));
+   throw Error('unexpected '+u);
+  };
+  const result=await (await handleFilmix(req({action:'post',id:12,device_token:'authorized_token'}),{})).json();
+  assert.deepEqual(result.items.map(x=>x.quality),['720p','480p']);
+ }finally{globalThis.fetch=old;}
+});
