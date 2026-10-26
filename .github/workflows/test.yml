@@ -24,7 +24,10 @@ jobs:
           node --check m.js
           node --check online.js
           node --check worker/filmix.js
+          node --check worker/rezka.js
+          node --check worker/backend.js
           node --check worker/index.js
+          node --check server/index.mjs
           npm test
       - name: Build Worker and static asset routing
         run: npx wrangler deploy --config wrangler.toml --dry-run --outdir /tmp/xot-worker

@@ -117,3 +117,23 @@ test('Filmix profile string "false" does not grant a Pro tier',async()=>{
   assert.deepEqual(result.items.map(x=>x.quality),['720p','480p']);
  }finally{globalThis.fetch=old;}
 });
+
+test('anonymous Filmix requests may use public HTTP with a fresh unlinked device ID',async()=>{
+ const old=globalThis.fetch,seen=[];
+ try{
+  globalThis.fetch=async input=>{const url=new URL(input);seen.push(url);if(url.protocol==='https:')throw TypeError('TLS certificate');return new Response(JSON.stringify([{id:99,title:'Example'}]));};
+  const r=await handleFilmix(req({action:'search',title:'Example'}),{});const data=await r.json();assert.equal(r.status,200);assert.equal(data.transport,'anonymous_http');assert.notEqual(seen[1].searchParams.get('user_dev_id'),'0123456789abcdef0123456789abcdef');assert.equal(seen[1].searchParams.has('user_dev_token'),false);
+ }finally{globalThis.fetch=old;}
+});
+test('Filmix never falls back to HTTP for personal tokens or pairing',async()=>{
+ const old=globalThis.fetch,seen=[];
+ try{
+  globalThis.fetch=async input=>{seen.push(new URL(input).protocol);throw TypeError('TLS certificate');};
+  for(const body of [{action:'search',title:'Example',device_token:'private-token'},{action:'pair'},{action:'confirm',temp_token:'temporary'}])assert.equal((await handleFilmix(req(body),{})).status,502);
+  assert.deepEqual(seen,['https:','https:','https:']);
+ }finally{globalThis.fetch=old;}
+});
+test('Filmix uses the redirect mode supported by Cloudflare and rejects redirects explicitly',async()=>{
+ const old=globalThis.fetch;
+ try{globalThis.fetch=async(url,options)=>{assert.equal(options.redirect,'manual');return new Response('',{status:302});};const response=await handleFilmix(req({action:'search',title:'Example'}),{});assert.equal((await response.json()).error,'filmix_http_302');}finally{globalThis.fetch=old;}
+});

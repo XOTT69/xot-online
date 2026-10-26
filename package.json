@@ -1,6 +1,6 @@
 {
   "name": "xot-online",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -10,9 +10,15 @@
     "predeploy": "npm run check:assets",
     "dev": "wrangler dev --config wrangler.toml",
     "deploy": "wrangler deploy --config wrangler.toml --keep-vars",
-    "test": "npm run check:assets && node --test tests/*.test.mjs"
+    "test": "npm run check:assets && node --test tests/*.test.mjs",
+    "smoke": "node scripts/smoke-native.mjs",
+    "server:start": "node server/index.mjs"
   },
   "devDependencies": {
+    "playwright-core": "^1.61.1",
     "wrangler": "^4.0.0"
+  },
+  "dependencies": {
+    "htmlparser2": "^10.1.0"
   }
 }
