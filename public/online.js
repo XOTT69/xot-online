@@ -2,11 +2,10 @@
 'use strict';
 if(!window.Lampa||window.__XOT_ONLINE_INITIALIZED__)return;
 window.__XOT_ONLINE_INITIALIZED__=true;
-var API_BASE=(function(){var ss=document.getElementsByTagName('script');for(var i=ss.length-1;i>=0;i--)if(ss[i].src&&/\/online\.js(?:\?|$)/.test(ss[i].src))return new URL(ss[i].src).origin;return location.origin;})();
-var lastCard=null,loading=false,pending=null;
+var API_BASE=(function(){var ss=document.getElementsByTagName('script');for(var i=ss.length-1;i>=0;i--)if(ss[i].src&&/\/online\.js(?:\?|$)/.test(ss[i].src))return new URL(ss[i].src).origin;return window.__XOT_API_BASE__||'https://xot-online.ai-beta69690.workers.dev';})();
+var lastCard=null,loading=false,pending=null,buttonTimers=[];
 try { var theme=document.querySelector('meta[name="theme-color"]'); if (!theme) { theme=document.createElement('meta');theme.setAttribute('name','theme-color');document.head.appendChild(theme); } theme.setAttribute('content','#171717'); } catch(e) {}
 var MOD_URL='https://cdn.jsdelivr.net/gh/nb557/plugins@851bcc9bc064ac06dc2b0e7ff6631baba61be511/online_mod.js';
-var CONSENT='xot_online_mod_consent_v1';
 var SOURCES=[
  {id:'filmix',title:'Filmix',description:'Вибір озвучення та якості через Online MOD',mode:'external'},
  {id:'rezka2',title:'HDRezka',description:'Online MOD · доступ залежить від мережі',mode:'external'},
@@ -20,7 +19,7 @@ var SOURCES=[
 function notify(s){if(Lampa.Noty&&Lampa.Noty.show)Lampa.Noty.show(s);else console.log('[XOT]',s);}
 function title(c){return(c&&(c.title||c.name||c.original_title||c.original_name))||'';}
 function uniqueTitles(card){var result=[];function add(v){v=String(v||'').trim();if(v&&!result.some(function(x){return x.toLowerCase()===v.toLowerCase();}))result.push(v);}add(card.title);add(card.name);add(card.original_title);add(card.original_name);var alt=card.alternative_titles;if(alt&&Array.isArray(alt.results))alt.results.forEach(function(x){add(x.title||x.name);});return result;}
-function unwrap(value){if(!value||typeof value!=='object')return null;var candidates=[value.card,value.movie,value.data&&value.data.movie,value.data&&value.data.card,value.object&&value.object.card,value.object&&value.object.movie,value.data,value];for(var i=0;i<candidates.length;i++)if(candidates[i]&&title(candidates[i]))return candidates[i];return null;}
+function unwrap(value){if(!value||typeof value!=='object')return null;var candidates=[value.card,value.movie,value.data&&value.data.movie,value.data&&value.data.card,value.object&&value.object.card,value.object&&value.object.movie,value.data,value];for(var i=0;i<candidates.length;i++)if(candidates[i]&&title(candidates[i])&&!candidates[i].activity&&!candidates[i].component)return candidates[i];return null;}
 function activeCard(){try{var a=Lampa.Activity&&Lampa.Activity.active&&Lampa.Activity.active();return unwrap(a)||unwrap(a&&a.params)||null;}catch(e){return null;}}
 function cardOf(e){return unwrap(e)||activeCard();}
 function storageGet(k,d){try{return Lampa.Storage.get(k,d);}catch(e){return d;}}
@@ -38,11 +37,26 @@ function select(items,heading,done){
   });
  }catch(error){console.error('[XOT] select',error);notify('ХОТ: помилка відкриття меню');}
 }
-function modReady(){try{return !!(Lampa.SettingsApi&&Lampa.SettingsApi.getComponent&&Lampa.SettingsApi.getComponent('online_mod'))||window.__XOT_MOD_LOADED===true;}catch(e){return window.__XOT_MOD_LOADED===true;}}
+// Component registration, rather than a settings entry, determines readiness.
+function modReady(){
+ try{
+  if(Lampa.Component&&typeof Lampa.Component.get==='function')return typeof Lampa.Component.get('online_mod')==='function';
+  return window.__XOT_MOD_LOADED===true||!!(Lampa.SettingsApi&&Lampa.SettingsApi.getComponent&&Lampa.SettingsApi.getComponent('online_mod'));
+ }catch(e){return false;}
+}
+function preferredSource(card){
+ var id=storageGet('online_mod_balanser','filmix');
+ try{
+  if(card.id&&Lampa.Storage.field&&Lampa.Storage.field('online_mod_save_last_balanser')===true&&Lampa.Storage.cache){
+   id=(Lampa.Storage.cache('online_mod_last_balanser',200,{})||{})[card.id]||id;
+  }
+ }catch(e){}
+ if(typeof id!=='string'||!/^[a-z][a-z0-9_-]{1,40}$/.test(id))id='filmix';
+ return SOURCES.filter(function(s){return s.id===id&&s.mode==='external';})[0]||{id:id,title:id};
+}
 function launchBalancer(card,src,query){
  if(!Lampa.Activity||!Lampa.Activity.push)return notify('ХОТ: Online MOD не підтримується цією версією Lampa');
  storageSet('online_mod_balanser',src.id);
- // The upstream module can override the selected source with a saved per-film balancer.
  try{
   if(card.id&&Lampa.Storage.field&&Lampa.Storage.field('online_mod_save_last_balanser')===true&&Lampa.Storage.cache){
    var saved=Lampa.Storage.cache('online_mod_last_balanser',200,{})||{};
@@ -50,27 +64,32 @@ function launchBalancer(card,src,query){
    storageSet('online_mod_last_balanser',saved);
   }
  }catch(e){console.warn('[XOT] preference',e);}
-
- try{var q=query||title(card);Lampa.Activity.push({url:'',title:'ХОТ · '+src.title,component:'online_mod',search:q,search_one:q,search_two:card.original_title||card.original_name||'',movie:card,page:1});}
+ // Preserve every movie identifier and both TV/movie title formats for native search.
+ var movie=Object.assign({},card);
+ movie.title=movie.title||movie.name||movie.original_title||movie.original_name;
+ movie.original_title=movie.original_title||movie.original_name||movie.title;
+ try{var q=query||title(movie);Lampa.Activity.push({url:'',title:'ХОТ · '+title(movie),component:'online_mod',search:q,search_one:q,search_two:movie.original_title,movie:movie,page:1});}
  catch(e){console.error('[XOT]',e);notify('ХОТ: не вдалося відкрити '+src.title);}
 }
 function external(card,src,query){
  if(modReady())return launchBalancer(card,src,query);
  pending={card:card,source:src,query:query};
- if(loading)return notify('ХОТ: зовнішній модуль завантажується');
- function load(){
-  loading=true;notify('ХОТ: завантажуємо Online MOD...');
-  var script=document.createElement('script');script.src=MOD_URL;script.async=true;
-  script.onload=function(){loading=false;if(!modReady()){pending=null;return notify('ХОТ: Online MOD не ініціалізувався');}window.__XOT_MOD_LOADED=true;var selected=pending;pending=null;if(selected)launchBalancer(selected.card,selected.source,selected.query);};
-  script.onerror=function(){loading=false;pending=null;notify('ХОТ: не вдалося завантажити Online MOD');};
-  (document.head||document.documentElement).appendChild(script);
+ if(loading)return;
+ loading=true;notify('ХОТ: завантажуємо Online MOD…');
+ var script=document.createElement('script'),timer=null,finished=false;
+ script.src=MOD_URL;script.async=true;
+ function finish(ok){
+  if(finished)return;finished=true;clearTimeout(timer);loading=false;
+  script.onload=script.onerror=null;
+  var selected=pending;pending=null;
+  if(!ok){if(script.parentNode)script.parentNode.removeChild(script);return notify('ХОТ: Online MOD недоступний. Перевір мережу та натисни ХОТ ще раз.');}
+  window.__XOT_MOD_LOADED=true;
+  if(selected)launchBalancer(selected.card,selected.source,selected.query);
  }
- if(storageGet(CONSENT,false)===true)return load();
- select([{title:'Підключити Online MOD',subtitle:'Зовнішній JavaScript може отримувати дані картки і мережевих запитів',action:'allow'},{title:'Скасувати',action:'cancel'}],
- 'ХОТ · Дозвіл на зовнішній модуль',function(choice){
-  if(!choice||choice.action!=='allow'){pending=null;return;}
-  storageSet(CONSENT,true);load();
- });
+ script.onload=function(){finish(modReady());};
+ script.onerror=function(){finish(false);};
+ timer=setTimeout(function(){finish(false);},15000);
+ (document.head||document.documentElement).appendChild(script);
 }
 function chooseQuery(card,source){
  var candidates=[];
@@ -374,31 +393,48 @@ function registerScreen(){
 }
 function open(card){
  if(!card||!title(card))return notify('ХОТ: немає даних про фільм');
+ external(card,preferredSource(card),title(card));
+}
+function openTools(card){
+ if(!card||!title(card))return notify('ХОТ: немає даних про фільм');
  if(registerScreen()&&Lampa.Activity&&Lampa.Activity.push){
   try{return Lampa.Activity.push({title:'ХОТ · '+title(card),component:'xot_online',movie:card,page:1});}
   catch(error){console.warn('[XOT] screen',error);}
  }
- // Compatibility fallback when custom components are unavailable.
  searchAll(card);
 }
 function button(e){
  var c=cardOf(e);if(c)lastCard=c;
  if(typeof window.jQuery!=='function')return;
- var $=window.jQuery,area=$('.full-start-new__buttons, .full-start__buttons').first();if(!area.length)return;
- area.find('.xot-online-button').remove();
+ var $=window.jQuery,scope=null;
+ try{scope=e&&e.object&&e.object.activity&&e.object.activity.render();}catch(error){}
+ var area=(scope?scope.find('.full-start-new__buttons, .full-start__buttons'):$('.full-start-new__buttons, .full-start__buttons')).first();if(!area.length)return;
+ var existing=area.find('.xot-online-button');
+ if(existing.length){existing.data('xot-card',c);return;}
  var b=$('<div class="full-start__button selector xot-online-button" tabindex="0"><span>ХОТ</span></div>');
- b.on('hover:enter click',function(){var current=activeCard()||lastCard;if(!current||!title(current))return notify('ХОТ: картка недоступна');open(current);});
+ b.data('xot-card',c);
+ var lastActivation=0;
+ b.on('hover:enter click',function(){
+  var now=Date.now();if(now-lastActivation<500)return;lastActivation=now;
+  var current=b.data('xot-card')||activeCard()||lastCard;
+  if(!current||!title(current))return notify('ХОТ: картка недоступна');
+  open(current);
+ });
+ b.on('hover:long contextmenu',function(event){
+  if(event&&event.preventDefault)event.preventDefault();
+  lastActivation=Date.now();openTools(b.data('xot-card')||activeCard()||lastCard);
+ });
  area.append(b);
 }
 if(Lampa.Component&&Lampa.Component.add)registerScreen();
 if(Lampa.Listener&&Lampa.Listener.follow)Lampa.Listener.follow('full',function(e){
  if(e&&['complite','complete','render'].indexOf(e.type)!==-1){
-  setTimeout(function(){button(e);},0);
-  setTimeout(function(){button(e);},350);
+  buttonTimers.forEach(clearTimeout);
+  buttonTimers=[setTimeout(function(){button(e);},0),setTimeout(function(){button(e);},350)];
  }
 });
 if(document.readyState==='loading'){
  document.addEventListener('DOMContentLoaded',function(){setTimeout(function(){button();},300);},{once:true});
 }else setTimeout(function(){button();},300);
-console.info('[XOT] Multi-source selector initialized');
+console.info('[XOT] Direct Online MOD launch initialized');
 })();

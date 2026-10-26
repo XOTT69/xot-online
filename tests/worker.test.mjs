@@ -16,3 +16,16 @@ test('catalog provider enables only with a configured endpoint',async()=>{const 
 
 test('UA providers not configured do not report playable results',async()=>{const r=await request('/api/search?title=Matrix&provider=uakino');const j=await r.json();assert.equal(r.status,200);assert.deepEqual(j.configured_providers,[]);assert.deepEqual(j.results,[]);});
 test('UA provider becomes enabled with an API URL',async()=>{const r=await worker.fetch(new Request('https://xot.test/api/providers'),{XOT_UAKINO_API_URL:'https://example.org/search'});const j=await r.json();assert.equal(j.providers.find(p=>p.id==='uakino').enabled,true);});
+
+test('plugin entrypoints return JavaScript with CORS and no stale cache',async()=>{
+ for(const path of ['/m.js','/online.js?v=0.2.0']){
+  const r=await worker.fetch(new Request('https://xot.test'+path),{ASSETS:{fetch:async()=>new Response('/* plugin */',{headers:{'content-type':'text/plain','cache-control':'public, max-age=86400'}})}});
+  assert.equal(r.status,200);assert.match(r.headers.get('content-type'),/^application\/javascript/);assert.equal(r.headers.get('access-control-allow-origin'),'*');assert.equal(r.headers.get('cache-control'),'no-store');assert.equal(await r.text(),'/* plugin */');
+ }
+});
+test('missing asset binding returns a diagnostic response',async()=>{const r=await request('/m.js');assert.equal(r.status,503);assert.equal((await r.json()).error,'assets_not_configured');});
+test('asset failures preserve their error status and content type',async()=>{const r=await worker.fetch(new Request('https://xot.test/m.js'),{ASSETS:{fetch:async()=>new Response('Not Found',{status:404,headers:{'content-type':'text/plain'}})}});assert.equal(r.status,404);assert.equal(r.headers.get('content-type'),'text/plain');});
+test('HEAD checks for plugin URLs have the same headers and no response body',async()=>{
+ const r=await worker.fetch(new Request('https://xot.test/m.js',{method:'HEAD'}),{ASSETS:{fetch:async()=>new Response('/* plugin */')}});
+ assert.equal(r.status,200);assert.match(r.headers.get('content-type'),/^application\/javascript/);assert.equal(r.headers.get('access-control-allow-origin'),'*');assert.equal(await r.text(),'');
+});

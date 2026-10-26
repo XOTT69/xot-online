@@ -16,6 +16,17 @@ export default {async fetch(request,env){
  const url=new URL(request.url);
  if(url.pathname==='/api/filmix')return handleFilmix(request,env);
  if(request.method==='OPTIONS')return new Response(null,{status:204,headers:{...headers,'access-control-allow-methods':'GET, OPTIONS'}});
+ if(url.pathname==='/m.js'||url.pathname==='/online.js'){
+  if(!['GET','HEAD'].includes(request.method))return json({error:'method_not_allowed'},405);
+  if(!env.ASSETS)return json({error:'assets_not_configured'},503);
+  const asset=await env.ASSETS.fetch(request);
+  const response=new Response(request.method==='HEAD'?null:asset.body,asset);
+  response.headers.set('access-control-allow-origin','*');
+  response.headers.set('cache-control','no-store');
+  response.headers.set('x-content-type-options','nosniff');
+  if(asset.ok)response.headers.set('content-type','application/javascript; charset=utf-8');
+  return response;
+ }
  if(request.method!=='GET')return json({error:'method_not_allowed'},405);
  if(url.pathname==='/api/health')return json({ok:true,service:'xot-online',provider_count:providers.filter(p=>!p.enabled||p.enabled(env)).length,features:{filmix_device_flow:true}});
  if(url.pathname==='/api/providers')return json({providers:providers.map(p=>({id:p.id,name:p.name,enabled:!p.enabled||p.enabled(env)}))});
