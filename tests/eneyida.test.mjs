@@ -23,6 +23,7 @@ test('Eneyida excludes the same-host trailer and gets voice details from the fil
 });
 test('PlayerJS data is parsed as literals without executing JavaScript',()=>{
  assert.equal(playerFile(player(master)),master);
+ assert.equal(playerFile(player(master).replace('new Playerjs','new TortugaCore')),master);
  const file=JSON.stringify([{title:'Укр. Дуб.',file:master}]);assert.equal(playerFile(`<script>new Playerjs({file:'${file}'});</script>`),file);
  assert.equal(playerFile(`<script>new Playerjs({file:${file}});</script>`),file);
  assert.throws(()=>playerFile('<script>new Playerjs({file:(globalThis.compromised=true)});</script>'),/player_format/);
@@ -41,6 +42,10 @@ test('Eneyida preserves both voice-first and season-first episode trees',()=>{
 });
 test('Eneyida reports excessive playlist nesting rather than silently dropping episodes',()=>{
  let tree={title:'1 серія',file:master};for(let i=0;i<20;i++)tree={folder:[tree]};assert.throws(()=>playerInventory(JSON.stringify([tree]),{series:true}),/response_too_large/);
+});
+test('Tortuga packed episode voices and subtitle tails preserve all voices and clean URLs',()=>{
+ const data=[{title:'Сезон 2',folder:[{title:'Серія 3',file:'{Studio A}'+master+'(subtitle:[UK]https://tortuga.tw/uk.vtt);{Studio B}'+master.replace('/film/','/dub/')+'(subtitle:)'}]}];
+ const items=playerInventory(JSON.stringify(data),{title:'Series',series:true,provider:'uaserials',source:'UASerials'});assert.equal(items.length,2);assert.deepEqual(items.map(x=>x.translation),['Studio A','Studio B']);assert.equal(items[0].season,2);assert.equal(items[0].episode,3);assert.equal(items[0].url,master);assert.equal(items[0].provider,'uaserials');
 });
 test('HLS quality uses cropped cinema width and resolves relative HTTPS variants',()=>{
  const items=hlsQualities(masterBody,master);assert.deepEqual(items.map(x=>x.quality),['1080p','720p','480p']);assert.equal(items[0].url,'https://s30.hdvbua.pro/media/film/1080/index.m3u8');

@@ -9,11 +9,11 @@ const movie={id:460458,title:'Оселя зла: Вітаємо у Раккун-
 function harness({card=movie,ready=true,stored={},early=false,expose=false}={}) {
  const values={...stored},components={},scripts=[],pushes=[],notices=[],menus=[],timers=new Map(),listeners={};
  let now=1000,nextTimer=0,button=null;
- const empty={length:0,remove(){}};
- const area={length:1,first(){return this;},find(){return button||empty;},append(node){button=node;}};
+ const empty={length:0,remove(){},first(){return this;},last(){return this;}};
+ const area={length:1,first(){return this;},find(){return button||empty;},append(node){button=node;},prepend(node){button=node;},children(){return empty;}};
  function jquery(input){
   if(typeof input==='string'&&input.includes('full-start-new__buttons'))return area;
-  return {length:1,handlers:{},values:{},data(key,value){if(arguments.length===2){this.values[key]=value;return this;}return this.values[key];},on(events,fn){events.split(' ').forEach(e=>this.handlers[e]=fn);return this;}};
+  return {0:{},length:1,handlers:{},values:{},data(key,value){if(arguments.length===2){this.values[key]=value;return this;}return this.values[key];},on(events,fn){events.split(' ').forEach(e=>this.handlers[e]=fn);return this;}};
  }
  if(ready)components.online_mod=function(){};
  const Lampa={

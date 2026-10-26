@@ -1,13 +1,13 @@
 # Candidates for native free Worker adapters
 
-Checked on 2026-10-26. Eneyida has now been implemented as a native adapter.
-Other entries remain research candidates, not newly enabled providers.
+Checked on 2026-10-26. Eneyida, KinoVezha and UASerials are now native adapters.
+Other entries remain research candidates, not enabled providers.
 The original checks below ran from the development machine. Eneyida subsequently
 passed Cloudflare Worker search/post checks and actual Lampa/Chromium playback:
 the 2021 Resident Evil film at 720p (1280 pixels wide) and 1080p (1920 pixels wide),
 6,447 seconds duration, plus Tulsa King season 2 episode 1. Its series inventory
 returned 31 episode/voice entries over four seasons and two voice labels; only
-the selected episode's video manifest was resolved. See `scripts/smoke-eneyida.mjs`.
+the selected episode's video manifest was resolved. See `scripts/smoke-public-players.mjs`.
 
 ## Eneyida — implemented and verified
 
@@ -28,7 +28,7 @@ the selected episode's video manifest was resolved. See `scripts/smoke-eneyida.m
 - Reference implementation:
   <https://github.com/CakesTwix/cloudstream-extensions-uk/blob/master/EneyidaProvider/src/main/kotlin/com/lagradost/EneyidaProvider.kt>
 
-## KinoVezha — another catalog, overlapping media
+## KinoVezha — implemented, overlapping media
 
 - Site: <https://kinovezha.tv/>
 - Public search: POST `/` with the same DLE search form.
@@ -47,7 +47,7 @@ the selected episode's video manifest was resolved. See `scripts/smoke-eneyida.m
 - Reference implementation:
   <https://github.com/CakesTwix/cloudstream-extensions-uk/blob/master/KinoVezhaProvider/src/main/kotlin/com/lagradost/KinoVezhaProvider.kt>
 
-## UASerials — catalog confirmed, playback pending
+## UASerials — implemented, overlapping media
 
 - Site: <https://uaserials.com/>
 - Public GET `/search/{encoded query}/` returned the correct film:
@@ -55,9 +55,33 @@ the selected episode's video manifest was resolved. See `scripts/smoke-eneyida.m
 - The current movie page uses a `player-control` web component with an encoded
   configuration, rather than a plain iframe. An existing provider implementation
   is useful context, but its behavior must be checked against this current page.
-- No stream resolution or successful playback is claimed from this test.
+- The current public tab format is decoded as data using WebCrypto PBKDF2 and
+  AES-CBC; no page scripts are executed. The primary Tortuga page returns an
+  HTML 404 to Cloudflare, so the public archive alias below is used if verified.
 - Reference implementation:
   <https://github.com/CakesTwix/cloudstream-extensions-uk/blob/master/UASerialsProProvider/src/main/kotlin/com/lagradost/UASerialsProProvider.kt>
+
+## Cloudflare and Lampa validation of the added catalogs
+
+- KinoVezha and UASerials both passed real Lampa/Chromium playback of the 2021
+  Resident Evil film at 720p (1280 pixels wide) and 1080p (1920 pixels wide), with
+  approximately 6,447 seconds of media duration.
+- KinoVezha returned 62 verified episode entries over five seasons of Breaking Bad;
+  season 2 episode 1 played with 720p/480p available.
+- UASerials returned 29 verified episode entries over three seasons of Tulsa King;
+  season 2 episode 1 played with 1080p/720p/480p available.
+- Both catalogs use Tortuga public player IDs. Those player pages currently return
+  a short HTML 404 document with status 200 to Cloudflare, despite returning player
+  data to the development machine. The adapter can try the public HDVB UA archive
+  alias only for numeric `vod/vid` and `embed/embd` paths. The ID alone is not enough:
+  the full original title, and movie year when applicable, must also match the
+  readable HLS media filename. Opaque/mismatching alternate media is omitted.
+- Primary 403/429 responses and challenges do not trigger that alternate lookup.
+- This is shared video infrastructure with independent catalog searches, not three
+  guaranteed independent video hosts. Catalog and verified mirror inventories
+  may differ. Only confirmed alternate media is returned.
+- The browser test also verifies the separate header voice control for series and
+  that only the selected episode's video manifest is requested.
 
 ## Deferred candidates
 
@@ -76,8 +100,8 @@ the selected episode's video manifest was resolved. See `scripts/smoke-eneyida.m
 
 1. Eneyida: implemented search, exact movie matching, separate trailer exclusion,
    voices/episodes, and direct HLS playback; verified on a Cloudflare Worker.
-2. Add KinoVezha as a separate catalog using shared player parsing where valid.
-3. Inspect the current UASerials player before committing to an adapter.
+2. KinoVezha: implemented and verified film/series playback from Cloudflare.
+3. UASerials: implemented current tab decoding and verified film/series playback.
 4. Revisit UAKino/UAFilm only if ordinary public access works.
 
 For every provider, show only qualities actually advertised by its media

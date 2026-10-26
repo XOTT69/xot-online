@@ -86,7 +86,7 @@ export function parseEneyidaPost(html,path){
 export function playerFile(html){
  const root=parseDocument(html);
  for(const script of all(root,n=>n.name==='script'&&!n.attribs?.src)){
-  const source=DomUtils.textContent(script),start=source.search(/new\s+Playerjs\s*\(/i);
+  const source=DomUtils.textContent(script),start=source.search(/new\s+(?:Playerjs|TortugaCore)\s*\(/i);
   if(start<0)continue;
   const fragment=source.slice(start),match=/\bfile\s*:\s*/.exec(fragment);
   if(!match)continue;
@@ -145,11 +145,17 @@ export function playerInventory(file,post){
   if(label&&!season&&!episode)next.translation=label;
   if(Array.isArray(node.folder)){walk(node.folder,next,depth+1);return;}
   if(typeof node.file!=='string')return;
-  let url;try{url=trustedURL(node.file).toString();}catch{return;}
-  const translation=next.translation||post.translation||'Українська',s=next.season||(post.series?1:null),e=next.episode||null;
+  const s=next.season||(post.series?1:null),e=next.episode||null;
   if(post.series&&!e)return;
-  const key=[url,s,e,translation].join('|');if(seen.has(key))return;seen.add(key);
-  items.push({title:post.title,source:'Eneyida',provider:'eneyida',translation,voice_id:'eneyida:'+translation,season:s,episode:e,url,quality:'Авто',needs_resolve:true});
+  // Tortuga may pack several voices into one episode field, followed by subtitle
+  // metadata. Keep every voice but pass only the actual HLS URL to the player.
+  for(const track of node.file.split(/;\s*(?=\{)/)){
+   const labelled=track.match(/^\{([^}]{1,200})\}/),raw=track.slice(labelled?labelled[0].length:0).split('(subtitle:')[0].trim();
+   let url;try{url=trustedURL(raw).toString();}catch{continue;}
+   const translation=clean(labelled?.[1])||next.translation||post.translation||'Українська';
+   const key=[url,s,e,translation].join('|');if(seen.has(key))continue;seen.add(key);
+   items.push({title:post.title,source:post.source||'Eneyida',provider:post.provider||'eneyida',translation,voice_id:(post.provider||'eneyida')+':'+translation,season:s,episode:e,url,quality:'Авто',needs_resolve:true});
+  }
  }
  walk(data);
  return items;
@@ -176,9 +182,13 @@ export function hlsQualities(body,base){
  if(lines.some(line=>line.startsWith('#EXTINF:')))return [{quality:'Авто',url:trustedURL(base).toString()}];
  throw Error('eneyida_invalid_playlist');
 }
-async function resolve(item){
+export async function resolvePlayerItem(item){
  const {body,url}=await upstream(item.url,'media');
  return hlsQualities(body,url).map(variant=>({...item,...variant,needs_resolve:false}));
+}
+export async function loadPublicPlayer(url,post,referer){
+ const player=await upstream(url,'player',{referer});
+ return playerInventory(playerFile(player.body),post);
 }
 export async function handleEneyida(request){
  if(request.method==='OPTIONS')return new Response(null,{status:204,headers:HEADERS});
@@ -201,15 +211,15 @@ export async function handleEneyida(request){
   }
   if(input.action==='stream'){
    const item={title:clean(input.title)||'Відео',source:'Eneyida',provider:'eneyida',translation:clean(input.translation)||'Українська',voice_id:clean(input.voice_id,240),season:Number(input.season)>0?Number(input.season):null,episode:Number(input.episode)>0?Number(input.episode):null,url:input.url};
-   return reply({items:await resolve(item)});
+   return reply({items:await resolvePlayerItem(item)});
   }
   const page=await upstream(ORIGIN+input.path,'page'),post=parseEneyidaPost(page.body,input.path);
   if(input.movie){const m=input.movie;if(!sameMovie(post,{title:m.titles[0],alternative_titles:m.titles.slice(1),year:m.year,series:typeof m.series==='boolean'?m.series:undefined}))throw Error('eneyida_movie_mismatch');}
-  const groups=await Promise.all(post.players.map(async url=>{const player=await upstream(url,'player',{referer:page.url.toString()});return playerInventory(playerFile(player.body),post);}));
+  const groups=await Promise.all(post.players.map(url=>loadPublicPlayer(url,post,page.url.toString())));
   let items=[...new Map(groups.flat().map(item=>[[item.url,item.season,item.episode,item.translation].join('|'),item])).values()];
   if(!items.length)throw Error('eneyida_stream_unavailable');
   // Resolve a movie's qualities immediately; episodes are resolved only on selection.
-  if(!post.series&&items.length<=8)items=(await Promise.all(items.map(item=>resolve(item).catch(()=>[item])))).flat();
+  if(!post.series&&items.length<=8)items=(await Promise.all(items.map(item=>resolvePlayerItem(item).catch(()=>[item])))).flat();
   const {players,...metadata}=post;
   return reply({...metadata,items});
  }catch(error){

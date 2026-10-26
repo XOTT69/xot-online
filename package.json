@@ -1,6 +1,6 @@
 {
   "name": "xot-online",
-  "version": "0.3.3",
+  "version": "0.3.4",
   "private": true,
   "type": "module",
   "scripts": {
@@ -12,7 +12,9 @@
     "deploy": "wrangler deploy --config wrangler.toml --keep-vars",
     "test": "npm run check:assets && node --test tests/*.test.mjs",
     "smoke": "node scripts/smoke-native.mjs",
-    "smoke:eneyida": "node scripts/smoke-eneyida.mjs",
+    "smoke:eneyida": "node scripts/smoke-public-players.mjs eneyida",
+    "smoke:kinovezha": "node scripts/smoke-public-players.mjs kinovezha",
+    "smoke:uaserials": "node scripts/smoke-public-players.mjs uaserials",
     "server:start": "node server/index.mjs"
   },
   "devDependencies": {
