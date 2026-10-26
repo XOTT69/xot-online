@@ -1,7 +1,7 @@
 (function () {
 'use strict';
 if (!window.Lampa || window.__XOT_ONLINE_INITIALIZED__) return;
-var VERSION='0.3.2', DEFAULT_API='https://xot-online.ai-beta69690.workers.dev';
+var VERSION='0.3.3', DEFAULT_API='https://xot-online.ai-beta69690.workers.dev';
 var API_BASE=window.__XOT_API_BASE__ || (function () {
  var scripts=document.getElementsByTagName('script');
  for(var i=scripts.length-1;i>=0;i--){
@@ -12,7 +12,7 @@ var API_BASE=window.__XOT_API_BASE__ || (function () {
  }
  return DEFAULT_API;
 })();
-var BASE_SOURCES=[{id:'filmix',title:'Filmix',kind:'native'},{id:'rezka',title:'HDRezka',kind:'native'},{id:'anilibria',title:'AniLibria · аніме',kind:'native'}];
+var BASE_SOURCES=[{id:'filmix',title:'Filmix',kind:'native'},{id:'eneyida',title:'Eneyida',kind:'native'},{id:'rezka',title:'HDRezka',kind:'native'},{id:'anilibria',title:'AniLibria · аніме',kind:'native'}];
 var lastCard=null,buttonTimers=[];
 function notify(message){if(Lampa.Noty)Lampa.Noty.show(message);}
 function get(key,fallback){try{return Lampa.Storage.get(key,fallback);}catch(e){return fallback;}}
@@ -57,6 +57,8 @@ function preferredSource(card){
 }
 function readableError(error){
  var code=error&&error.message||String(error||'');
+ var eneyidaErrors={eneyida_movie_mismatch:'Сторінка Eneyida не відповідає вибраному фільму. Уточни назву через пошук угорі.',eneyida_access_denied:'Eneyida обмежила доступ. Спробуй інший балансер.',eneyida_timeout:'Eneyida не відповіла вчасно.',eneyida_player_not_found:'На сторінці Eneyida не знайдено доступного плеєра.',eneyida_player_format:'Eneyida змінила формат плеєра.',eneyida_invalid_playlist:'Eneyida не повернула придатного відеоплейліста.',eneyida_stream_unavailable:'Для цього фільму або серії Eneyida не повернула відео.',eneyida_unsupported_stream:'Цей формат відео Eneyida поки не підтримується.',eneyida_unavailable:'Eneyida зараз недоступна. Повтори запит або вибери інший балансер.'};
+ if(eneyidaErrors[code])return eneyidaErrors[code];
  var errors={anilibria_unavailable:'AniLibria зараз недоступна. Спробуй інший балансер.',anilibria_timeout:'AniLibria не відповіла вчасно.',anilibria_restricted:'AniLibria обмежила доступ до цього релізу.',anilibria_invalid_response:'AniLibria змінила формат відповіді.',filmix_unavailable:'Filmix зараз недоступний. Перемкни балансер або повтори пошук.',filmix_timeout:'Filmix не відповів вчасно.',filmix_http_403:'Filmix обмежив доступ.',filmix_http_401:'Filmix відхилив авторизацію. Від’єднай пристрій або перевір акаунт.',filmix_invalid_json:'Filmix повернув невідомий формат відповіді.',rezka_access_denied:'HDRezka повернула 403 або обмеження доступу. Спробуй інший балансер.',rezka_mirror_redirect:'Адреса HDRezka змінилася. Потрібно оновити адресу джерела на сервері.',rezka_player_not_found:'На сторінці HDRezka не знайдено доступного плеєра.',rezka_stream_unavailable:'Це відео або озвучення HDRezka зараз недоступне.',rezka_timeout:'HDRezka не відповіла вчасно.',rezka_unavailable:'Не вдалося з’єднатися з HDRezka.',rezka_unsupported_stream_format:'HDRezka змінила формат відповіді плеєра.',request_timeout:'Сервер не відповів вчасно. Повтори запит.',invalid_response:'Сервер повернув некоректну відповідь.'};
  return errors[code]||'Джерело не відповіло коректно ('+code.slice(0,70)+').';
 }
@@ -158,7 +160,7 @@ function registerScreen(){
     });
    }else{
     var queries=manual?[query]:names(card).slice(0,4);
-    search=Promise.all(queries.map(function(name){var payload={title:name};if(which.id==='rezka'&&!manual)payload.movie={titles:names(card),year:String(card.release_date||card.first_air_date||'').slice(0,4),series:Boolean(card.name||card.first_air_date||card.media_type==='tv')};return request(which.id,'search',payload,operation.signal).then(function(data){return {items:data.results||[]};}).catch(function(error){return {error:error};});})).then(function(groups){
+    search=Promise.all(queries.map(function(name){var payload={title:name};if((which.id==='rezka'||which.id==='eneyida')&&!manual)payload.movie={titles:names(card),year:String(card.release_date||card.first_air_date||'').slice(0,4),series:Boolean(card.name||card.first_air_date||card.media_type==='tv')};return request(which.id,'search',payload,operation.signal).then(function(data){return {items:data.results||[]};}).catch(function(error){return {error:error};});})).then(function(groups){
      var values=[],seen={};
      groups.forEach(function(g){(g.items||[]).forEach(function(item){if(!seen[item.id]){seen[item.id]=true;values.push(item);}});});
      if(!values.length&&groups.some(function(g){return g.error;}))throw groups.filter(function(g){return g.error;})[0].error;
@@ -180,7 +182,9 @@ function registerScreen(){
   }
   function openPost(item){
    var operation=begin();loading('Завантажуємо озвучення '+source().title+'…');
-   request(sourceId,'post',{id:item.id,path:item.path},operation.signal).then(function(data){
+   var payload={id:item.id,path:item.path};
+   if(sourceId==='eneyida'&&!manual)payload.movie={titles:names(card),year:String(card.release_date||card.first_air_date||'').slice(0,4),series:Boolean(card.name||card.first_air_date||card.media_type==='tv')};
+   request(sourceId,'post',payload,operation.signal).then(function(data){
     if(!current(operation.token))return;finish();post=data;post.title=data.title||item.title;
     if(sourceId!=='rezka'){streams=(data.items||[]).filter(function(x){return media(x.url);});unavailable=data.unavailable||[];qualityCap=data.quality_cap||null;state='streams';drawStreams();}
     else if(data.series){chooseRezkaVoice(data.translations[0]);}
@@ -226,7 +230,7 @@ function registerScreen(){
    scoped.forEach(function(item){var key=[item.season||'',item.episode||'',voiceKey(item)].join('|');if(!groups.has(key))groups.set(key,[]);groups.get(key).push(item);});
    var locked=unavailable.filter(function(item){return (!seasons.length||item.season===season)&&(!voice||voiceKey(item)===voice);});
    if(!groups.size&&!locked.length)line('Немає доступних потоків','Спробуй інший балансер, озвучення або авторизацію.');
-   groups.forEach(function(items){var first=items[0],qualities=items.map(function(x){return x.quality;}).filter(function(v,i,a){return a.indexOf(v)===i;});
+   groups.forEach(function(items){var first=items[0],qualities=items.reduce(function(all,x){return all.concat(x.available_qualities||[x.quality]);},[]).filter(function(v,i,a){return a.indexOf(v)===i;});
     line((first.episode?'Серія '+first.episode+' · ':'')+(first.translation||'Оригінал'),qualities.join(' · '),function(){playGroup(items);},true);
    });
    locked.forEach(function(item){
@@ -240,6 +244,17 @@ function registerScreen(){
    return Lampa.Timeline.view(Lampa.Utils.hash(['xot',card.name||card.first_air_date?'tv':'movie',card.id||card.original_title||title(card),item.season||0,item.episode||0].join(':')));
   }
   function playGroup(items){
+   if(sourceId==='eneyida'&&items.some(function(item){return item.needs_resolve;})){
+    var operation=begin();loading('Перевіряємо якості відео Eneyida…');
+    request('eneyida','stream',items[0],operation.signal).then(function(data){
+     if(!current(operation.token))return;finish();
+     var resolved=(data.items||[]).filter(function(item){return media(item.url)&&!item.needs_resolve;});
+     if(!resolved.length)throw Error('eneyida_stream_unavailable');
+     var original=items[0];streams=streams.filter(function(item){return !(item.url===original.url&&item.season===original.season&&item.episode===original.episode&&voiceKey(item)===voiceKey(original));}).concat(resolved);
+     drawStreams();playGroup(resolved);
+    }).catch(function(error){if(current(operation.token)&&error.name!=='AbortError'){drawStreams();notify(readableError(error));}});
+    return;
+   }
    var quality={};items.forEach(function(item){if(media(item.url))quality[item.quality||'Авто']=item.url;});
    var keys=Object.keys(quality).sort(function(a,b){return (parseInt(b)||0)-(parseInt(a)||0);});
    if(!keys.length)return notify('ХОТ: немає доступного відео');

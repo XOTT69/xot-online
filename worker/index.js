@@ -1,6 +1,7 @@
 import {handleFilmix} from './filmix.js';
 import {handleRezka} from './rezka.js';
 import {handleAnilibria} from './anilibria.js';
+import {handleEneyida} from './eneyida.js';
 import {forwardNative} from './backend.js';
 import {providers,normalize} from './providers.js';
 import {buildQueries,matchScore} from './matching.js';
@@ -23,6 +24,7 @@ export default {async fetch(request,env){
  if(url.pathname==='/api/filmix')return handleFilmix(request,env);
  if(url.pathname==='/api/rezka')return handleRezka(request,env);
  if(url.pathname==='/api/anilibria')return handleAnilibria(request);
+ if(url.pathname==='/api/eneyida')return handleEneyida(request);
  if(request.method==='OPTIONS')return new Response(null,{status:204,headers:{...headers,'access-control-allow-methods':'GET, OPTIONS'}});
  if(url.pathname==='/m.js'||url.pathname==='/online.js'){
   if(!['GET','HEAD'].includes(request.method))return json({error:'method_not_allowed'},405);
@@ -36,7 +38,7 @@ export default {async fetch(request,env){
   return response;
  }
  if(request.method!=='GET')return json({error:'method_not_allowed'},405);
- if(url.pathname==='/api/health')return json({ok:true,service:'xot-online',provider_count:providers.filter(p=>!p.enabled||p.enabled(env)).length,native_balancers:['filmix','rezka','anilibria'],features:{filmix_device_flow:true,native_balancers:true}});
+ if(url.pathname==='/api/health')return json({ok:true,service:'xot-online',provider_count:providers.filter(p=>!p.enabled||p.enabled(env)).length,native_balancers:['filmix','eneyida','rezka','anilibria'],features:{filmix_device_flow:true,native_balancers:true}});
  if(url.pathname==='/api/providers')return json({providers:providers.map(p=>({id:p.id,name:p.name,enabled:!p.enabled||p.enabled(env)}))});
  if(url.pathname==='/api/query-plan'||url.pathname==='/api/search'){
   const query=getQuery(url);if(!check(query))return json({error:'invalid_query'},400);
