@@ -25,6 +25,7 @@ jobs:
           node --check online.js
           node --check worker/filmix.js
           node --check worker/rezka.js
+          node --check worker/anilibria.js
           node --check worker/backend.js
           node --check worker/index.js
           node --check server/index.mjs

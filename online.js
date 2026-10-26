@@ -1,7 +1,7 @@
 (function () {
 'use strict';
 if (!window.Lampa || window.__XOT_ONLINE_INITIALIZED__) return;
-var VERSION='0.3.0', DEFAULT_API='https://xot-online.ai-beta69690.workers.dev';
+var VERSION='0.3.1', DEFAULT_API='https://xot-online.ai-beta69690.workers.dev';
 var API_BASE=window.__XOT_API_BASE__ || (function () {
  var scripts=document.getElementsByTagName('script');
  for(var i=scripts.length-1;i>=0;i--){
@@ -12,7 +12,7 @@ var API_BASE=window.__XOT_API_BASE__ || (function () {
  }
  return DEFAULT_API;
 })();
-var BASE_SOURCES=[{id:'filmix',title:'Filmix',kind:'native'},{id:'rezka',title:'HDRezka',kind:'native'}];
+var BASE_SOURCES=[{id:'filmix',title:'Filmix',kind:'native'},{id:'rezka',title:'HDRezka',kind:'native'},{id:'anilibria',title:'AniLibria · аніме',kind:'native'}];
 var lastCard=null,buttonTimers=[];
 function notify(message){if(Lampa.Noty)Lampa.Noty.show(message);}
 function get(key,fallback){try{return Lampa.Storage.get(key,fallback);}catch(e){return fallback;}}
@@ -53,7 +53,7 @@ function preferredSource(card){
 }
 function readableError(error){
  var code=error&&error.message||String(error||'');
- var errors={filmix_unavailable:'Filmix зараз недоступний. Перемкни балансер або повтори пошук.',filmix_timeout:'Filmix не відповів вчасно.',filmix_http_403:'Filmix обмежив доступ.',filmix_http_401:'Filmix відхилив авторизацію. Від’єднай пристрій або перевір акаунт.',filmix_invalid_json:'Filmix повернув невідомий формат відповіді.',rezka_access_denied:'HDRezka повернула 403 або обмеження доступу. Спробуй інший балансер.',rezka_mirror_redirect:'Адреса HDRezka змінилася. Потрібно оновити адресу джерела на сервері.',rezka_player_not_found:'На сторінці HDRezka не знайдено доступного плеєра.',rezka_stream_unavailable:'Це відео або озвучення HDRezka зараз недоступне.',rezka_timeout:'HDRezka не відповіла вчасно.',rezka_unavailable:'Не вдалося з’єднатися з HDRezka.',rezka_unsupported_stream_format:'HDRezka змінила формат відповіді плеєра.',request_timeout:'Сервер не відповів вчасно. Повтори запит.',invalid_response:'Сервер повернув некоректну відповідь.'};
+ var errors={anilibria_unavailable:'AniLibria зараз недоступна. Спробуй інший балансер.',anilibria_timeout:'AniLibria не відповіла вчасно.',anilibria_restricted:'AniLibria обмежила доступ до цього релізу.',anilibria_invalid_response:'AniLibria змінила формат відповіді.',filmix_unavailable:'Filmix зараз недоступний. Перемкни балансер або повтори пошук.',filmix_timeout:'Filmix не відповів вчасно.',filmix_http_403:'Filmix обмежив доступ.',filmix_http_401:'Filmix відхилив авторизацію. Від’єднай пристрій або перевір акаунт.',filmix_invalid_json:'Filmix повернув невідомий формат відповіді.',rezka_access_denied:'HDRezka повернула 403 або обмеження доступу. Спробуй інший балансер.',rezka_mirror_redirect:'Адреса HDRezka змінилася. Потрібно оновити адресу джерела на сервері.',rezka_player_not_found:'На сторінці HDRezka не знайдено доступного плеєра.',rezka_stream_unavailable:'Це відео або озвучення HDRezka зараз недоступне.',rezka_timeout:'HDRezka не відповіла вчасно.',rezka_unavailable:'Не вдалося з’єднатися з HDRezka.',rezka_unsupported_stream_format:'HDRezka змінила формат відповіді плеєра.',request_timeout:'Сервер не відповів вчасно. Повтори запит.',invalid_response:'Сервер повернув некоректну відповідь.'};
  return errors[code]||'Джерело не відповіло коректно ('+code.slice(0,70)+').';
 }
 function jsonRequest(path,body,signal){
@@ -115,7 +115,7 @@ function registerScreen(){
    if(candidates.length>1)controls.push({title:'Вибрати інший збіг',action:'candidates'});
    var seasons=sourceId==='rezka'?episodeList.map(function(s){return s.season;}):Array.from(new Set(streams.map(function(s){return s.season;}).filter(Boolean))).sort(function(a,b){return a-b;});
    if(seasons.length)controls.push({title:'Сезон '+(season||seasons[0]),action:'season',seasons:seasons});
-   if(sourceId==='filmix'&&streams.some(function(s){return s.season;}))controls.push({title:'Озвучення: '+(voice||'усі'),action:'voice'});
+   if(sourceId!=='rezka'&&streams.some(function(s){return s.season;}))controls.push({title:'Озвучення: '+(voice||'усі'),action:'voice'});
    if(sourceId==='rezka'&&post&&post.series)controls.push({title:'Озвучення: '+(rezkaVoice&&rezkaVoice.title||'обрати'),action:'rezka_voice'});
    if(sourceId==='filmix'){
     controls.push({title:'Filmix · прив’язати пристрій за кодом',action:'pair'});
@@ -127,7 +127,7 @@ function registerScreen(){
    if(destroyed)return;finish();state='error';clear();
    line(source().title+' · джерело недоступне',readableError(error));
    line('Повторити запит','Пошук у вибраному джерелі',lookup);
-   line('Вибрати інший балансер','Filmix, HDRezka та підключені каталоги',function(){filter.show('Балансер','sort');});
+   line('Вибрати інший балансер',sources.map(function(s){return s.title;}).join(', '),function(){filter.show('Балансер','sort');});
    if(sourceId==='filmix'&&get('xot_filmix_device_token',''))line('Спробувати без акаунта','Видалити локальний токен Filmix і виконати анонімний пошук',function(){set('xot_filmix_device_token','');lookup();});
    updateFilter();self.start();
   }
@@ -176,7 +176,7 @@ function registerScreen(){
    var operation=begin();loading('Завантажуємо озвучення '+source().title+'…');
    request(sourceId,'post',{id:item.id,path:item.path},operation.signal).then(function(data){
     if(!current(operation.token))return;finish();post=data;post.title=data.title||item.title;
-    if(sourceId==='filmix'){streams=(data.items||[]).filter(function(x){return media(x.url);});state='streams';drawStreams();}
+    if(sourceId!=='rezka'){streams=(data.items||[]).filter(function(x){return media(x.url);});state='streams';drawStreams();}
     else if(data.series){chooseRezkaVoice(data.translations[0]);}
     else{state='translations';drawRezkaVoices();}
    }).catch(function(error){if(current(operation.token)&&error.name!=='AbortError')showError(error);});
