@@ -56,30 +56,43 @@ function qualityChoices(url,cap){
   return mediaURL.test(concrete)?{quality:q?q+'p':'auto',url:concrete}:null;
  }).filter(Boolean);
 }
-export function flattenFilmixPost(post,cap=480){
- const out=[],links=post&&post.player_links||{},name=limit(post.title,200)||'Відео';
- const add=(voice,link,season,episode)=>{
-  for(const choice of qualityChoices(link,cap))out.push({title:name,source:'Filmix',provider:'filmix',translation:limit(voice,90)||'Оригінал',season:season||null,episode:episode||null,...choice});
+export function filmixInventory(post,cap=480){
+ const items=[],unavailable=[],voices=[],voiceMap=new Map();
+ const links=post&&post.player_links||{},name=limit(post&&post.title,200)||'Відео';
+ const add=(rawVoice,link,season,episode)=>{
+  const label=String(rawVoice||'Оригінал').trim()||'Оригінал';
+  let voice=voiceMap.get(label);
+  if(!voice){voice={id:'filmix_voice_'+voices.length,translation:limit(label,240),available:false};voiceMap.set(label,voice);voices.push(voice);}
+  const identity={title:name,source:'Filmix',provider:'filmix',translation:voice.translation,voice_id:voice.id,season:season||null,episode:episode||null};
+  const choices=qualityChoices(link,cap);
+  for(const choice of choices)items.push({...identity,...choice});
+  if(choices.length){voice.available=true;return;}
+  const advertised=qualityChoices(link,Infinity).map(choice=>choice.quality);
+  unavailable.push({...identity,available_qualities:advertised,reason:advertised.length?'quality_limit':'no_secure_stream'});
  };
  const movie=Array.isArray(links.movie)?links.movie:[];
- for(const v of movie)add(v.translation,v.link);
+ for(const entry of movie)if(entry&&typeof entry==='object')add(entry.translation,entry.link);
  const seasons=links.playlist&&!Array.isArray(links.playlist)?links.playlist:{};
- for(const [number,voices] of Object.entries(seasons)){
+ for(const [number,translations] of Object.entries(seasons)){
   const season=Number(number)||0;
-  if(!season||!voices||typeof voices!=='object')continue;
-  for(const [voice,raw] of Object.entries(voices)){
+  if(!season||!translations||typeof translations!=='object')continue;
+  for(const [voice,raw] of Object.entries(translations)){
    const episodes=Array.isArray(raw)?raw.map((entry,i)=>[i+1,entry]):
     Array.isArray(raw&&raw.episodes)?raw.episodes.map((entry,i)=>[i+1,entry]):
     raw&&typeof raw==='object'?Object.entries(raw).sort((a,b)=>Number(a[0])-Number(b[0])):[];
-   episodes.forEach(([key,item])=>{
-    const link=typeof item==='string'?item:item&&item.link;
-    const num=(item&&Number(item.number||item.episode))||Number(key);
-    if(Number.isInteger(num)&&num>0)add(voice,link,season,num);
-   });
+   for(const [key,entry] of episodes){
+    const link=typeof entry==='string'?entry:entry&&entry.link;
+    const number=(entry&&Number(entry.number||entry.episode))||Number(key);
+    if(Number.isInteger(number)&&number>0)add(voice,link,season,number);
+   }
   }
  }
- return out.slice(0,350);
+ // Preserve every translation and episode; the bounded upstream response is the
+ // size limit. Cutting the flat list here used to drop later voices in series.
+ return {items,unavailable,voices,quality_cap:cap};
 }
+export function flattenFilmixPost(post,cap=480){return filmixInventory(post,cap).items;}
+
 function err(e){
  const str=String(e&&e.message||'unavailable');
  if(/^filmix_(?:http_\d{3}|invalid_json|response_too_large|api_error|https_required)$/.test(str))return str;
@@ -136,7 +149,7 @@ export async function handleFilmix(request,env){
     else if(profile&&profile.login)cap=720;
    }catch(e){/* A valid token without Pro verification never raises the quality cap. */}
   }
-  return reply({transport,title:limit(response&&response.title,200),items:flattenFilmixPost(response,cap)});
+  return reply({transport,title:limit(response&&response.title,200),...filmixInventory(response,cap)});
  }catch(e){
   if(env?.XOT_DEBUG==='true')console.warn('[XOT Filmix]',action,String(e?.message||'unknown').replace(/https?:\/\/\S+/g,'[upstream]').slice(0,180));
   return reply({error:err(e)},502);

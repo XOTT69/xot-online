@@ -29,3 +29,12 @@ test('HEAD checks for plugin URLs have the same headers and no response body',as
  const r=await worker.fetch(new Request('https://xot.test/m.js',{method:'HEAD'}),{ASSETS:{fetch:async()=>new Response('/* plugin */')}});
  assert.equal(r.status,200);assert.match(r.headers.get('content-type'),/^application\/javascript/);assert.equal(r.headers.get('access-control-allow-origin'),'*');assert.equal(await r.text(),'');
 });
+test('movie identity cannot be inferred from year or title fragments alone',async()=>{
+ const {sameMovie}=await import('../worker/matching.js');
+ const query={title:'The Matrix',year:1999,series:false};
+ assert.equal(sameMovie({title:'Different film',year:1999,series:false},query),false);
+ assert.equal(sameMovie({title:'The Matrix Reloaded',year:1999,series:false},query),false);
+ assert.equal(sameMovie({title:'The Matrix',year:2000,series:false},query),false);
+ assert.equal(sameMovie({title:'The Matrix',year:1999,series:true},query),false);
+ assert.equal(sameMovie({title:'Матрица',year:1999,series:false},{...query,alternative_titles:['Матрица']}),true);
+});

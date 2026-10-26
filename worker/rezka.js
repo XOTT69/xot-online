@@ -1,4 +1,5 @@
 import {parseDocument, DomUtils} from 'htmlparser2';
+import {sameMovie} from './matching.js';
 
 const DEFAULT_ORIGIN='https://hdrezka.ag';
 const HEADERS={'content-type':'application/json; charset=utf-8','cache-control':'no-store','access-control-allow-origin':'*','access-control-allow-methods':'POST, OPTIONS','access-control-allow-headers':'Content-Type','x-content-type-options':'nosniff'};
@@ -46,8 +47,12 @@ async function upstream(origin,path,form,redirects=0){
 }
 export function parseRezkaSearch(html,origin=DEFAULT_ORIGIN){
  const root=parseDocument(html),seen=new Set(),results=[];
- const cards=all(root,node=>hasClass(node,'b-content__inline_item'));
- const candidates=cards.length?cards:all(root,node=>node.name==='li'&&first(node,n=>n.name==='a'&&/\.html(?:$|\?)/.test(n.attribs?.href||'')));
+ const candidates=all(root,node=>hasClass(node,'b-content__inline_item')).filter(node=>{
+  for(let parent=node.parent;parent;parent=parent.parent){
+   if(['aside','nav','header','footer'].includes(parent.name)||/(?:^|\s)(?:b-sidelist|b-post__related|recommendations|related)(?:\s|$)/.test(parent.attribs?.class||''))return false;
+  }
+  return true;
+ });
  for(const node of candidates){
   const content=first(node,n=>hasClass(n,'b-content__inline_item-link'))||node;
   const link=first(content,n=>n.name==='a'&&n.attribs?.href);
@@ -58,7 +63,7 @@ export function parseRezkaSearch(html,origin=DEFAULT_ORIGIN){
   const title=limit(text(link));if(!title)continue;
   seen.add(id);
   const detail=all(content,n=>n.name==='div'||n.name==='span').map(text).join(' ')||text(content),year=detail.match(/\b(19\d{2}|20\d{2})\b/);
-  results.push({id:String(id),path,title,original_title:'',year:year?Number(year[1]):null,series:path.startsWith('/series/')});
+  results.push({id:String(id),path,title,original_title:'',year:year?Number(year[1]):null,series:path.startsWith('/series/')?true:path.startsWith('/films/')?false:undefined});
  }
  return results.slice(0,50);
 }
@@ -120,6 +125,10 @@ export async function handleRezka(request,env={}){
  const action=limit(input.action,24);
  if(!['probe','search','post','episodes','stream'].includes(action))return reply({error:'invalid_action'},400);
  if(action==='search'&&(!input.title||String(input.title).length>200))return reply({error:'invalid_query'},400);
+ if(action==='search'&&input.movie){
+  const movie=input.movie;
+  if(typeof movie!=='object'||Array.isArray(movie)||!Array.isArray(movie.titles)||movie.titles.length>8||movie.titles.some(title=>typeof title!=='string'||title.length>200)||movie.year&&!/^\d{4}$/.test(String(movie.year)))return reply({error:'invalid_movie'},400);
+ }
  if(['episodes','stream'].includes(action)&&(!ID.test(String(input.id||''))||!ID.test(String(input.translator_id||''))))return reply({error:'invalid_id'},400);
  if(action==='stream'&&input.series&&(!ID.test(String(input.season||''))||!ID.test(String(input.episode||''))))return reply({error:'invalid_episode'},400);
  if(action==='post'){try{pathOf(input.path);}catch{return reply({error:'rezka_invalid_path'},400);}}
@@ -129,7 +138,12 @@ export async function handleRezka(request,env={}){
   if(action==='search'){
    const params=new URLSearchParams({do:'search',subaction:'search',q:limit(input.title)});
    const html=await upstream(origin,'/search/?'+params);
-   return reply({results:parseRezkaSearch(html.body,html.origin)});
+   let results=parseRezkaSearch(html.body,html.origin);
+   if(input.movie){
+    const movie=input.movie;
+    results=results.filter(item=>sameMovie(item,{title:movie.titles[0],alternative_titles:movie.titles.slice(1),year:movie.year,series:typeof movie.series==='boolean'?movie.series:undefined}));
+   }
+   return reply({results});
   }
   if(action==='post'){
    const path=pathOf(input.path),page=await upstream(origin,path);

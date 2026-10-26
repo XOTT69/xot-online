@@ -38,3 +38,21 @@ test('Rezka rejects redirects outside the service and identifies a 200 anti-bot 
  const old=globalThis.fetch;let calls=0;
  try{globalThis.fetch=async()=>{calls++;return new Response('',{status:302,headers:{location:'https://attacker.example'}});};const rejected=await handleRezka(req({action:'search',title:'Example'}),{});assert.equal((await rejected.json()).error,'rezka_mirror_redirect');assert.equal(calls,1);globalThis.fetch=async()=>new Response('<title>Проверяем, что вы не бот!</title>');const blocked=await handleRezka(req({action:'post',path}),{});assert.equal((await blocked.json()).error,'rezka_access_denied');}finally{globalThis.fetch=old;}
 });
+test('generic page links and sidebar recommendations are not search results',()=>{
+ const home=`<ul><li><a href="${path}">Example &amp; Film</a></li></ul><aside>${search}</aside><div class="related">${search}</div>`;
+ assert.deepEqual(parseRezkaSearch(home),[]);
+});
+test('Rezka movie identity filtering rejects unrelated films from the same year',async()=>{
+ const old=globalThis.fetch;
+ try{
+  const other=search.replaceAll('123','987').replace('Example &amp; Film','Different film');
+  globalThis.fetch=async()=>new Response(search+other);
+  const response=await handleRezka(req({action:'search',title:'Example',movie:{titles:['Example & Film'],year:'2021',series:false}}),{});
+  const results=(await response.json()).results;assert.equal(results.length,1);assert.equal(results[0].id,'123');
+  const noMatch=await handleRezka(req({action:'search',title:'Something',movie:{titles:['Selected movie'],year:'2021',series:false}}),{});
+  assert.deepEqual((await noMatch.json()).results,[]);
+ }finally{globalThis.fetch=old;}
+});
+test('malformed movie identity is rejected before making an upstream request',async()=>{
+ const response=await handleRezka(req({action:'search',title:'Film',movie:{titles:'Film'}}),{});assert.equal(response.status,400);
+});

@@ -6,7 +6,7 @@ const plugin=readFileSync(new URL('../public/online.js',import.meta.url),'utf8')
 const loader=readFileSync(new URL('../public/m.js',import.meta.url),'utf8');
 const movie={id:460458,title:'Оселя зла: Вітаємо у Раккун-Сіті',original_title:'Resident Evil: Welcome to Raccoon City',release_date:'2021-11-24',imdb_id:'tt6920084',source:'tmdb'};
 
-function harness({card=movie,ready=true,stored={},early=false}={}) {
+function harness({card=movie,ready=true,stored={},early=false,expose=false}={}) {
  const values={...stored},components={},scripts=[],pushes=[],notices=[],menus=[],timers=new Map(),listeners={};
  let now=1000,nextTimer=0,button=null;
  const empty={length:0,remove(){}};
@@ -32,7 +32,7 @@ function harness({card=movie,ready=true,stored={},early=false}={}) {
  context.window=context;
  if(early)delete context.Lampa;
  function advance(ms){const end=now+ms;let count=0;while(true){const due=[...timers].filter(([,v])=>v.at<=end).sort((a,b)=>a[1].at-b[1].at)[0];if(!due)break;if(++count>1000)throw Error('timer loop');now=due[1].at;timers.delete(due[0]);due[1].fn();}now=end;}
- function boot(){runInNewContext(plugin,context);advance(350);}
+ function boot(){const code=expose?plugin.replace(/\}\)\(\);\s*$/, 'window.__testMatching={matches:matches,names:names,voiceKey:voiceKey};})();'):plugin;runInNewContext(code,context);advance(350);}
  function enter(){assert.ok(button,'movie button is mounted');button.handlers['hover:enter']();}
  return {context,Lampa,values,components,scripts,pushes,notices,menus,timers,listeners,boot,advance,enter,get button(){return button;}};
 }
@@ -61,3 +61,17 @@ test('loader uses the Worker origin without putScriptAsync',()=>{const h=harness
 test('loader waits for Lampa during startup',()=>{const h=harness({early:true});runInNewContext(loader,h.context);assert.equal(h.scripts.length,0);h.context.Lampa=h.Lampa;h.advance(100);assert.equal(h.scripts.length,1);});
 test('loader errors allow another attempt',()=>{const h=harness();runInNewContext(loader,h.context);h.scripts[0].onerror();assert.equal(h.context.__XOT_LOADER_PENDING__,false);runInNewContext(loader,h.context);assert.equal(h.scripts.length,2);});
 test('an unrelated script does not redirect the loader to the Lampa origin',()=>{const h=harness();h.context.document.currentScript={src:'https://lampa.example/app.min.js'};runInNewContext(loader,h.context);assert.equal(new URL(h.scripts[0].src).origin,'https://xot-online.ai-beta69690.workers.dev');});
+
+
+test('client refuses same-year unrelated titles, sequels and remakes by default',()=>{
+ const h=harness({expose:true});h.boot();const {matches}=h.context.__testMatching;
+ assert.equal(matches({title:'A different movie',year:2021,series:false},movie),false);
+ assert.equal(matches({title:movie.original_title+' 2',year:2021,series:false},movie),false);
+ assert.equal(matches({title:movie.original_title,year:2020,series:false},movie),false);
+ assert.equal(matches({title:movie.original_title,year:2021,series:false},movie),true);
+ assert.equal(matches({title:'Обитель зла: Раккун-Сити',year:2021,series:false},{...movie,xot_search_titles:['Обитель зла: Раккун-Сити']}),true);
+});
+test('client retains distinct voice IDs when displayed labels are the same',()=>{
+ const h=harness({expose:true});h.boot();const {voiceKey}=h.context.__testMatching;
+ assert.notEqual(voiceKey({voice_id:'one',translation:'Voice'}),voiceKey({voice_id:'two',translation:'Voice'}));
+});
