@@ -83,7 +83,7 @@ the selected episode's video manifest was resolved. See `scripts/smoke-public-pl
 - The browser test also verifies the separate header voice control for series and
   that only the selected episode's video manifest is requested.
 
-## UAKino audit (v0.3.6)
+## UAKino audit (v0.3.6, rechecked in v0.3.7)
 
 The current public catalog is <https://uakino.eu/>, rather than the older
 `uakino.best` / `uakino.top` addresses. Its public search and exact movie identity
@@ -104,6 +104,13 @@ This is `uakino_region_restricted`, not a parser failure or a successful empty
 search. No alternate IP, relay, protected player or region bypass is attempted.
 Lampa shows the restriction; aggregate and backup results contain no fake streams.
 This source is implemented but is **not a verified working Worker balancer**.
+
+A normal request through the production Worker was repeated for v0.3.7 and still
+returned `uakino_region_restricted`. The same UAKino page publishes only Ashdi,
+UACDN and its trailer. Its alternative UACDN page explicitly sets
+`captcha_required: true` and does not publish video files before that check.
+Neither player is presented as an available aggregate result. Individual UAKino
+selection retains the regional restriction message. No hosting change was made.
 
 ## Deferred candidates
 
