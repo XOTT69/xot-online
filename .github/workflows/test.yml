@@ -29,6 +29,7 @@ jobs:
           node --check worker/eneyida.js
           node --check worker/ukrainian.js
           node --check worker/ufdub.js
+          node --check worker/serialno.js
           node --check worker/backend.js
           node --check worker/index.js
           node --check server/index.mjs
@@ -37,6 +38,8 @@ jobs:
           node --check scripts/smoke-backup.mjs
           node --check scripts/smoke-public-players.mjs
           node --check scripts/smoke-ufdub.mjs
+          node --check scripts/smoke-source-controls.mjs
+          node --check scripts/smoke-serialno.mjs
           npm test
       - name: Build Worker and static asset routing
         run: npx wrangler deploy --config wrangler.toml --dry-run --outdir /tmp/xot-worker

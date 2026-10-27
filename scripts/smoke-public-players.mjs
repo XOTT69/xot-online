@@ -20,7 +20,7 @@ try{
  const ukrainian=page.getByText('Українська',{exact:true});if(await ukrainian.count())await ukrainian.first().click();
  await page.waitForFunction(()=>Lampa.Activity.active(),{timeout:20000});
  await page.evaluate(()=>{
-  Lampa.Storage.set('xot_native_source','filmix');Lampa.Storage.set('xot_native_last_sources',{});
+  Lampa.Storage.set('xot_native_source','filmix');Lampa.Storage.set('xot_native_last_sources',{460458:'filmix'});
   $('body').append('<div class="full-start__buttons xot-test-fixture"></div>');
   const original=Lampa.Player.play;window.xotPlayed=[];
   Lampa.Player.play=function(data){window.xotPlayed.push(data);return original.apply(this,arguments);};
@@ -57,6 +57,7 @@ try{
  assert.equal(streamRequests.length,0,'Movie qualities should be resolved before playback');
  await page.evaluate(()=>Lampa.Activity.backward());
  const seriesCard=sourceId==='kinovezha'?{id:1396,name:'Пуститися берега',original_name:'Breaking Bad',first_air_date:'2008-01-20',source:'tmdb',vote_average:9}:{id:153312,name:'Король Талси',original_name:'Tulsa King',first_air_date:'2022-11-13',source:'tmdb',vote_average:8};
+ await page.evaluate(({id,sourceId})=>Lampa.Storage.set('xot_native_last_sources',{[id]:sourceId}),{id:seriesCard.id,sourceId});
  await openCard(seriesCard);
  await page.waitForFunction(sourceId=>Lampa.Storage.get('xot_native_source')===sourceId&&$('.xot-native-row.selector').text().includes('Серія 1'),sourceId,{timeout:30000});
  assert.equal(await page.locator('.xot--voice.selector:visible').count(),1,'A separate voice picker is visible for series');

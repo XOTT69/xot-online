@@ -32,7 +32,7 @@ function harness({card=movie,ready=true,stored={},early=false,expose=false}={}) 
  context.window=context;
  if(early)delete context.Lampa;
  function advance(ms){const end=now+ms;let count=0;while(true){const due=[...timers].filter(([,v])=>v.at<=end).sort((a,b)=>a[1].at-b[1].at)[0];if(!due)break;if(++count>1000)throw Error('timer loop');now=due[1].at;timers.delete(due[0]);due[1].fn();}now=end;}
- function boot(){const code=expose?plugin.replace(/\}\)\(\);\s*$/, 'window.__testMatching={matches:matches,names:names,get:get,voiceKey:voiceKey,ukrainian:ukrainian,chooseQuality:chooseQuality,episodeGroups:episodeGroups,backupGroups:backupGroups,deliveryFamily:deliveryFamily,streamItem:streamItem};})();'):plugin;runInNewContext(code,context);advance(350);}
+ function boot(){const code=expose?plugin.replace(/\}\)\(\);\s*$/, 'window.__testMatching={matches:matches,names:names,get:get,voiceKey:voiceKey,ukrainian:ukrainian,chooseQuality:chooseQuality,episodeGroups:episodeGroups,backupGroups:backupGroups,deliveryFamily:deliveryFamily,streamItem:streamItem,sourcePreferences:sourcePreferences,sourceEnabled:sourceEnabled,orderedSources:orderedSources,preferredSource:preferredSource,displayGroups:displayGroups,cachedSearch:cachedSearch,clearSearchCache:function(){searchCache.clear();},cacheKeys:function(){return Array.from(searchCache.keys());}};})();'):plugin;runInNewContext(code,context);advance(350);}
  function enter(){assert.ok(button,'movie button is mounted');button.handlers['hover:enter']();}
  return {context,Lampa,values,components,scripts,pushes,notices,menus,timers,listeners,boot,advance,enter,get button(){return button;}};
 }
@@ -45,11 +45,11 @@ test('the independent plugin contains no Online MOD or Lumio runtime dependency'
 test('TV names normalize without mutating the original card',()=>{
  const card={id:1,name:'Серіал',original_name:'Series',first_air_date:'2025-01-01'};const h=harness({card});h.boot();h.enter();assert.equal(h.pushes[0].movie.title,'Серіал');assert.equal(h.pushes[0].movie.original_title,'Series');assert.equal(card.title,undefined);
 });
-test('XOT remembers its own global source without reading Online MOD preferences',()=>{
- const h=harness({stored:{xot_native_source:'rezka',online_mod_balanser:'filmix'}});h.boot();h.enter();assert.equal(h.pushes[0].xot_source,'rezka');assert.equal(h.values.online_mod_balanser,'filmix');
+test('A new card opens all sources regardless of the last global selection',()=>{
+ const h=harness({stored:{xot_native_source:'ufdub',online_mod_balanser:'filmix'}});h.boot();h.enter();assert.equal(h.pushes[0].xot_source,'all');assert.equal(h.values.online_mod_balanser,'filmix');
 });
-test('per-film XOT source overrides its global preference',()=>{
- const h=harness({stored:{xot_native_source:'filmix',xot_native_last_sources:{[movie.id]:'rezka'}}});h.boot();h.enter();assert.equal(h.pushes[0].xot_source,'rezka');
+test('An enabled source explicitly selected for this card is remembered',()=>{
+ const h=harness({stored:{xot_native_source:'filmix',xot_native_last_sources:{[movie.id]:'eneyida'}}});h.boot();h.enter();assert.equal(h.pushes[0].xot_source,'eneyida');
 });
 test('hover and click from one activation open one activity',()=>{const h=harness();h.boot();h.enter();h.button.handlers.click();assert.equal(h.pushes.length,1);});
 test('repeated initialization does not duplicate the button',()=>{const h=harness();h.boot();const button=h.button;h.boot();assert.equal(h.button,button);h.enter();assert.equal(h.pushes.length,1);});
@@ -118,4 +118,50 @@ test('Only native UFDub descriptors can enter lazy queues and they cannot be pla
  assert.equal(deliveryFamily(item.resolve_url),deliveryFamily('https://api.ufdub.com/UFDUB_UPLOAD/VIDEO/one.mp4'));assert.equal(backupGroups([item],{season:1,episode:3},new Set(['ufdub'])).length,0);
  for(const bad of [{...item,provider:'catalog'},{...item,post_id:'999'},{...item,resolve_url:item.resolve_url.replace('ufdub.com','attacker.example')},{...item,resolve_url:item.resolve_url+'&ID=454'},{...item,needs_resolve:false}])assert.equal(streamItem(bad),false);
  assert.equal(matches({title:'Alternate',alternative_titles:[movie.original_title],year:2021,series:false},movie),true);assert.equal(matches({title:'Alternate',alternative_titles:[movie.original_title+' 2'],year:2021,series:false},movie),false);
+});
+test('Source settings preserve order, suppress disabled/removed sources and cannot disable All',()=>{
+ const h=harness({expose:true,stored:{xot_source_preferences:{order:['filmix','anilibria','eneyida'],disabled:['all','eneyida']},xot_native_last_sources:{[movie.id]:'eneyida'}}});h.boot();h.enter();const api=h.context.__testMatching;
+ assert.equal(h.pushes[0].xot_source,'all');assert.equal(api.sourceEnabled('all'),true);
+ const list=[{id:'all'},{id:'eneyida'},{id:'filmix'},{id:'anilibria'},{id:'ufdub'}];
+ assert.deepEqual(JSON.parse(JSON.stringify(api.orderedSources(list).map(s=>s.id))),['all','filmix','ufdub']);
+ assert.deepEqual(JSON.parse(JSON.stringify(api.orderedSources(list,true).map(s=>s.id))),['all','filmix','eneyida','ufdub']);
+ for(const removed of ['uakino','anilibria']){h.values.xot_native_last_sources[movie.id]=removed;assert.equal(api.preferredSource(movie),'all');}
+});
+test('Initial preferences leave anime out and disable optional UFDub and unavailable Rezka',()=>{
+ const h=harness({expose:true});h.boot();const api=h.context.__testMatching;
+ assert.equal(api.sourceEnabled('ufdub'),false);assert.equal(api.sourceEnabled('rezka'),false);assert.equal(api.sourceEnabled('eneyida'),true);assert.doesNotMatch(plugin,/id:'anilibria'/);
+ h.values.xot_source_preferences={order:['ufdub'],disabled:[]};assert.equal(api.sourceEnabled('ufdub'),true);
+});
+test('Identical multi-quality video groups merge across catalogs without losing voices or episode identity',()=>{
+ const h=harness({expose:true});h.boot();const {displayGroups}=h.context.__testMatching;
+ const row=(provider,quality=1080,extra={})=>({provider,source:provider,title:'Show',season:1,episode:3,translation:'Студія',voice_id:provider+':studio',quality:quality+'p',url:'https://cdn.example/show/'+quality+'.m3u8?token=one',...extra});
+ const first=[row('eneyida'),row('eneyida',720)],second=[row('uaserials',720),row('uaserials')];
+ const merged=displayGroups(first.concat(second),true);assert.equal(merged.length,1);assert.equal(merged[0].names.length,2);assert.equal(merged[0].items[0].provider,'eneyida');assert.equal(merged[0].items.length,2);
+ assert.equal(displayGroups(first.concat(second),false).length,2);
+ for(const extra of [{translation:'Інша студія'},{episode:4},{season:2},{url:'https://cdn.example/show/1080.m3u8?token=two'},{audio_track:'second'},{language:'ru'},{needs_resolve:true}])assert.equal(displayGroups([row('eneyida'),row('uaserials',1080,extra)],true).length,2);
+ assert.equal(displayGroups([row('eneyida'),row('eneyida',1080,{voice_id:'different-id'})],true).length,2);
+ assert.equal(displayGroups(first.concat([row('uaserials')]),true).length,2,'Partial quality inventories must not silently replace each other');
+});
+test('Search cache stores only metadata, expires and separates movie identity',async()=>{
+ const h=harness({expose:true});h.boot();const api=h.context.__testMatching;let calls=0;
+ h.context.fetch=async()=>{calls++;return {ok:true,json:async()=>({results:[{id:1,title:'Movie',year:2022,path:'/1-movie.html',url:'https://cdn.example/temporary.m3u8',device_token:'not-metadata'}]})};};
+ const payload={title:'Movie',movie:{titles:['Movie'],year:2022,series:false}};
+ assert.equal((await api.cachedSearch('eneyida',payload)).cached,false);const hit=await api.cachedSearch('eneyida',payload);assert.equal(hit.cached,true);assert.equal(calls,1);assert.equal(hit.data.results[0].url,undefined);assert.equal(hit.data.results[0].device_token,undefined);
+ hit.data.results[0].title='Changed';assert.equal((await api.cachedSearch('eneyida',payload)).data.results[0].title,'Movie');
+ await api.cachedSearch('eneyida',{...payload,movie:{...payload.movie,year:2023}});assert.equal(calls,2);
+ h.advance(300001);assert.equal((await api.cachedSearch('eneyida',payload)).cached,false);assert.equal(calls,3);
+ api.clearSearchCache();await api.cachedSearch('eneyida',payload);assert.equal(calls,4);
+});
+test('Empty searches expire sooner; errors and aborted requests are never cached',async()=>{
+ const h=harness({expose:true});h.boot();const api=h.context.__testMatching;let calls=0,bad=false;
+ h.context.fetch=async()=>{calls++;return {ok:!bad,json:async()=>bad?{error:'access_denied'}:{results:[]}};};
+ const payload={title:'Missing'};await api.cachedSearch('eneyida',payload);await api.cachedSearch('eneyida',payload);assert.equal(calls,1);h.advance(60001);await api.cachedSearch('eneyida',payload);assert.equal(calls,2);
+ api.clearSearchCache();bad=true;await assert.rejects(api.cachedSearch('eneyida',payload),/access_denied/);await assert.rejects(api.cachedSearch('eneyida',payload),/access_denied/);assert.equal(calls,4);
+ bad=false;await api.cachedSearch('eneyida',payload,{aborted:true});await api.cachedSearch('eneyida',payload);assert.equal(calls,6);
+});
+test('Authenticated Filmix searches bypass guest cache and never put tokens in cache keys',async()=>{
+ const h=harness({expose:true});h.boot();const api=h.context.__testMatching;let calls=0;
+ h.context.fetch=async()=>{calls++;return {ok:true,json:async()=>({results:[{id:1,title:'Movie'}]})};};
+ const payload={title:'Movie'};await api.cachedSearch('filmix',payload);await api.cachedSearch('filmix',payload);assert.equal(calls,1);
+ h.values.xot_filmix_device_token='private-filmix-token';await api.cachedSearch('filmix',payload);await api.cachedSearch('filmix',payload);assert.equal(calls,3);assert.ok(!api.cacheKeys().some(k=>k.includes('private-filmix-token')));
 });

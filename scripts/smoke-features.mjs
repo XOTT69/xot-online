@@ -20,7 +20,7 @@ try{
   if(aggregateMode&&input.action==='post'){const response=await route.fetch(),data=await response.json();data.unavailable=(data.unavailable||[]).concat(unavailableFixture);return route.fulfill({response,json:data});}
   await route.continue();
  });
- for(const id of ['kinovezha','uaserials','ufdub'])await page.route(origin+'/api/'+id,route=>emptyMode?route.fulfill({json:{results:[]}}):route.continue());
+ for(const id of ['kinovezha','uaserials','ufdub','serialno'])await page.route(origin+'/api/'+id,route=>emptyMode?route.fulfill({json:{results:[]}}):route.continue());
  await page.route(origin+'/api/anilibria',async route=>{const body=route.request().postDataJSON();if(body.action==='post')unrelatedPosts++;await route.fulfill({json:{results:[{id:999,title:'Unrelated movie',year:2021,series:false}]}});});
  await page.route(origin+'/api/eneyida',async route=>{
   const body=route.request().postDataJSON();
@@ -36,7 +36,7 @@ try{
  const ukrainian=page.getByText('Українська',{exact:true});if(await ukrainian.count())await ukrainian.first().click();
  await page.waitForFunction(()=>Lampa.Activity.active());
  await page.evaluate(()=>{
-  Lampa.Storage.set('xot_native_source','uakino');Lampa.Storage.set('xot_native_last_sources',{460458:'uakino'});Lampa.Storage.set('xot_native_voices',{});Lampa.Storage.set('xot_prefer_ukrainian',true);Lampa.Storage.set('video_quality_default',1080);
+  Lampa.Storage.set('xot_source_preferences',{order:[],disabled:[]});Lampa.Storage.set('xot_native_source','filmix');Lampa.Storage.set('xot_native_last_sources',{460458:'filmix'});Lampa.Storage.set('xot_native_voices',{});Lampa.Storage.set('xot_prefer_ukrainian',true);Lampa.Storage.set('video_quality_default',1080);
   $('body').append('<div class="full-start__buttons xot-test-fixture"></div>');
   const original=Lampa.Player.play;window.xotPlays=[];Lampa.Player.play=function(data){window.xotPlays.push({url:data.url,qualities:Object.keys(data.quality||{}),title:data.title});return original.apply(this,arguments);};
  });
@@ -79,7 +79,7 @@ try{
  await page.evaluate(()=>{const data=Lampa.Player.playdata();Lampa.PlayerPanel.listener.send('quality',{name:'720p',url:data.quality['720p']});});
  await page.waitForFunction(()=>Lampa.Storage.get('video_quality_default')===720&&[...document.querySelectorAll('video')].some(v=>v.videoWidth===1280&&v.currentTime>1));
  await page.evaluate(()=>Lampa.Player.close());await page.evaluate(()=>Lampa.Activity.backward());
- await page.evaluate(()=>{Lampa.Storage.set('xot_native_source','eneyida');Lampa.Storage.set('xot_native_last_sources',{});});
+ await page.evaluate(()=>{Lampa.Storage.set('xot_native_source','eneyida');Lampa.Storage.set('xot_native_last_sources',{153312:'eneyida'});});
  await open({id:153312,name:'Король Талси',original_name:'Tulsa King',first_air_date:'2022-11-13',source:'tmdb'});
  await page.waitForFunction(()=>$('.xot-native-row.selector').text().includes('Серія 1'),{timeout:30000});
  await page.evaluate(()=>$('.filter--filter').trigger('hover:enter'));await choose('Сезон 1',true);await choose('Сезон 2',true);

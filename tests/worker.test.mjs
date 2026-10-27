@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import worker from '../worker/index.js';
 import {buildQueries,matchScore} from '../worker/matching.js';
 const request=path=>worker.fetch(new Request('https://xot.test'+path),{});
-test('health shows zero independent API providers',async()=>{const r=await request('/api/health'),data=await r.json();assert.equal(data.provider_count,0);assert.deepEqual(data.native_balancers,['filmix','eneyida','kinovezha','uaserials','ufdub','rezka','anilibria']);});
+test('health shows zero independent API providers',async()=>{const r=await request('/api/health'),data=await r.json();assert.equal(data.provider_count,0);assert.deepEqual(data.native_balancers,['filmix','eneyida','kinovezha','uaserials','ufdub','serialno','rezka','anilibria']);});
 test('providers registry is disabled by default',async()=>{const list=(await (await request('/api/providers')).json()).providers;assert.equal(list.length,6);assert.equal(list.some(p=>p.id==='uakino'),false);assert.equal(list[0].id,'uaserials');assert.equal(list[0].enabled,false);assert.equal(list[4].id,'catalog');assert.equal(list[4].enabled,false);assert.equal(list[5].id,'kodik');assert.equal(list[5].enabled,false);});
 test('invalid search rejected',async()=>{assert.equal((await request('/api/search')).status,400);});
 test('archive variants removed',async()=>{assert.equal((await request('/api/variants?provider=archive&identifier=test')).status,404);});

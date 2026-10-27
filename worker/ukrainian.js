@@ -99,7 +99,7 @@ export function matchesMirrorMedia(item,post){
  }
  return false;
 }
-async function catalogPlayer(url,post,referer){
+export async function catalogPlayer(url,post,referer){
  try{return await loadPublicPlayer(url,post,referer);}catch(error){
   // No CAPTCHA, authentication, or 403/429 fallback: only the unavailable public
   // Tortuga page that responds with a non-player document may use its public alias.

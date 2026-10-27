@@ -25,7 +25,7 @@ try{
  const uk=page.getByText('Українська',{exact:true});if(await uk.count())await uk.first().click();
  await page.waitForFunction(()=>Lampa.Activity.active(),null,{timeout:20000});
  await page.evaluate(()=>{
-  Lampa.Storage.set('xot_native_source','ufdub');Lampa.Storage.set('xot_native_last_sources',{});Lampa.Storage.set('video_quality_default',1080);
+  Lampa.Storage.set('xot_source_preferences',{order:[],disabled:['rezka']});Lampa.Storage.set('xot_native_source','ufdub');Lampa.Storage.set('xot_native_last_sources',{1024:'ufdub',777001:'ufdub'});Lampa.Storage.set('video_quality_default',1080);
   $('body').append('<div class="full-start__buttons xot-test-fixture"></div>');
   const original=Lampa.Player.play;window.xotPlayed=[];Lampa.Player.play=function(data){window.xotPlayed.push({title:data.title,season:data.season,episode:data.episode,qualities:Object.keys(data.quality||{})});window.xotLogPlay(window.xotPlayed.at(-1));return original.apply(this,arguments);};
  });

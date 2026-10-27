@@ -4,6 +4,34 @@ Checked on 2026-10-26. Eneyida, KinoVezha and UASerials are now native adapters.
 UFDub was added in v0.3.11 after Cloudflare and Lampa playback checks. Other
 entries remain research candidates, not enabled providers.
 
+## Serialno — implemented and verified in v0.3.12
+
+- Public catalog: <https://serialno.tv/>. Search uses the normal DLE form and
+  semantic `.th-item` cards. The known series is
+  <https://serialno.tv/1515-zzovni.html>, From (2022).
+- Only published main playback tabs are inspected. Its first player is
+  `https://tortuga.tw/embed/1516`; the Ashdi tab and same-host trailer are excluded.
+  Scripts are parsed as data, not executed.
+- From Cloudflare, the unavailable public Tortuga document can use the existing
+  identity-checked `hdvbua.pro/embd/1516` archive alias. An ID is insufficient:
+  each media filename must independently identify `From`. CAPTCHA, 403/429 or
+  authentication failures do not trigger this lookup. The resulting inventory
+  has 45 episode/voice entries across four seasons in this check; it can differ
+  from the original player's inventory.
+- Real Lampa/Chromium playback passed for season 1 episodes 1 and 2 at 1920×960,
+  3,155.319 and 2,966.923 seconds duration. Native next-episode navigation
+  preserved HDrezka Studio; only the two chosen manifests were resolved.
+- The catalog shares video infrastructure with existing sources. It is not
+  described as an independent CDN backup. Mirror studio names do not imply
+  Ukrainian audio; the adapter does not stamp every mirrored voice as `uk`.
+- Full original title/year/type are rechecked before player lookup. When search
+  cards omit original titles, at most four same-year pages are inspected for
+  metadata only. A movie card skips this series-only provider without a request.
+- AniLibria was removed from the client menus and searches at the user's request;
+  no AniTube adapter is added. The old AniLibria server API remains for compatibility.
+- Live check: `npm run smoke:serialno`. Primary provider reference:
+  <https://github.com/CakesTwix/cloudstream-extensions-uk/blob/master/SerialnoProvider/src/main/kotlin/com/lagradost/SerialnoProvider.kt>.
+
 ## Additional candidates checked on 2026-10-27
 
 These checks use normal public catalog/player requests. Neither candidate was
@@ -14,8 +42,10 @@ does not establish compatibility with every TV.
 ### UAFlix — deferred after full catalog access check
 
 The initial manifest/segment probes below were insufficient. A real catalog
-request from Cloudflare later returned only a YouTube trailer and an explicit
-message asking for authentication or a country change. The adapter prototype
+request from Cloudflare later returned only a YouTube trailer and a generic
+message suggesting authentication or a country change. That message alone
+does not identify whether the cause is location, server IP, or session state;
+the exact reason for the differing player response remains unconfirmed. The adapter prototype
 was not published. No SEO iframe fallback, region change, fingerprint script
 execution or authorization bypass is used to work around that message.
 

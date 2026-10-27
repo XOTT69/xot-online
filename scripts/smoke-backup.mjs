@@ -17,7 +17,7 @@ try{
  const uk=page.getByText('Українська',{exact:true});if(await uk.count())await uk.first().click();
  await page.waitForFunction(()=>Lampa.Activity.active());
  await page.evaluate(aggregate=>{
-  Lampa.Storage.set('xot_native_source',aggregate?'all':'eneyida');Lampa.Storage.set('xot_prefer_ukrainian','false');Lampa.Storage.set('xot_native_last_sources',{});Lampa.Storage.set('video_quality_default',720);Lampa.Storage.set('player_timecode','again');
+  Lampa.Storage.set('xot_native_source',aggregate?'all':'eneyida');Lampa.Storage.set('xot_prefer_ukrainian','false');Lampa.Storage.set('xot_native_last_sources',{153312:aggregate?'all':'eneyida'});Lampa.Storage.set('video_quality_default',720);Lampa.Storage.set('player_timecode','again');
   $('body').append('<div class="full-start__buttons xot-test-fixture"></div>');
  },aggregate);
  await page.addScriptTag({url:origin+'/m.js'});await page.waitForFunction(()=>window.__XOT_ONLINE_INITIALIZED__);
