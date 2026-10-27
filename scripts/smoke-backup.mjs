@@ -2,6 +2,7 @@
 import assert from 'node:assert/strict';
 import {chromium} from 'playwright-core';
 import {serveLocalAssets} from './smoke-assets.mjs';
+const aggregate=process.env.XOT_BACKUP_AGGREGATE==='1';
 const origin=process.env.XOT_TEST_ORIGIN||'https://xot-online.ai-beta69690.workers.dev';
 let releaseStreams;const streamGate=new Promise(resolve=>{releaseStreams=resolve;});
 const browser=await chromium.launch({headless:true,...(process.env.PLAYWRIGHT_EXECUTABLE_PATH?{executablePath:process.env.PLAYWRIGHT_EXECUTABLE_PATH}:{})});
@@ -15,28 +16,29 @@ try{
  await page.waitForFunction(()=>window.Lampa?.Component&&window.jQuery,{timeout:30000});await page.waitForTimeout(2500);
  const uk=page.getByText('Українська',{exact:true});if(await uk.count())await uk.first().click();
  await page.waitForFunction(()=>Lampa.Activity.active());
- await page.evaluate(()=>{
-  Lampa.Storage.set('xot_native_source','eneyida');Lampa.Storage.set('xot_native_last_sources',{});Lampa.Storage.set('video_quality_default',720);Lampa.Storage.set('player_timecode','again');
+ await page.evaluate(aggregate=>{
+  Lampa.Storage.set('xot_native_source',aggregate?'all':'eneyida');Lampa.Storage.set('xot_prefer_ukrainian','false');Lampa.Storage.set('xot_native_last_sources',{});Lampa.Storage.set('video_quality_default',720);Lampa.Storage.set('player_timecode','again');
   $('body').append('<div class="full-start__buttons xot-test-fixture"></div>');
- });
+ },aggregate);
  await page.addScriptTag({url:origin+'/m.js'});await page.waitForFunction(()=>window.__XOT_ONLINE_INITIALIZED__);
  await page.evaluate(()=>Lampa.Listener.send('full',{type:'complite',data:{movie:{id:153312,name:'Король Талси',original_name:'Tulsa King',first_air_date:'2022-11-13',source:'tmdb'}},object:{activity:{render:()=>$('body')}}}));
  await page.waitForTimeout(450);await page.evaluate(()=>$('.xot-online-button').trigger('hover:enter'));
- await page.waitForFunction(()=>$('.xot-native-row.selector').text().includes('Серія 1'),{timeout:30000});
+ await page.waitForFunction(aggregate=>$('.xot-native-row.selector:not(.xot-source-status)').filter(function(){return $(this).text().includes('Серія 1')&&(!aggregate||$(this).text().includes('Eneyida'));}).length>0,aggregate,{timeout:30000});
  async function choose(text){
   await page.waitForFunction(text=>$('.selectbox .selector').filter(function(){return $(this).text().trim()===text;}).length>0,text);
   await page.evaluate(text=>$('.selectbox .selector').filter(function(){return $(this).text().trim()===text;}).first().trigger('hover:enter'),text);
  }
  await page.evaluate(()=>$('.filter--filter').trigger('hover:enter'));await choose('Сезон 1');await choose('Сезон 2');
- await page.evaluate(()=>$('.xot-native-row.selector').first().trigger('hover:enter'));
+ await page.evaluate(aggregate=>$('.xot-native-row.selector:not(.xot-source-status)').filter(function(){return !aggregate||$(this).text().includes('Eneyida');}).first().trigger('hover:enter'),aggregate);
  await page.waitForFunction(()=>document.querySelector('video')?.currentTime>1&&!document.querySelector('video')?.paused,{timeout:30000});
  await page.evaluate(()=>Lampa.PlayerVideo.to(65));
  await page.waitForFunction(()=>document.querySelector('video')?.currentTime>=65,{timeout:15000});
+ const beforeSearch=backupSearches,maxSearches=await page.evaluate(()=>{const c=Lampa.Player.playdata().card;return Math.min(4,new Set([c.title,c.name,c.original_title,c.original_name,...(c.xot_search_titles||[])].filter(Boolean).map(x=>x.toLowerCase())).size);});
  await page.evaluate(()=>{Lampa.PlayerVideo.listener.send('error',{fatal:true});Lampa.PlayerVideo.listener.send('error',{fatal:true});});
  await page.waitForFunction(()=>$('.selectbox').text().includes('Резервне джерело'),{timeout:30000});
  const choices=await page.evaluate(()=>$('.selectbox .selector').map(function(){return $(this).text().trim();}).get());
  assert.ok(choices.some(v=>v.includes('Filmix')));assert.ok(!choices.some(v=>/KinoVezha|UASerials|Another/.test(v)),'Shared failed CDN and unrelated films cannot be backups');
- assert.equal(wrongPosts,0);assert.ok(backupSearches<=2,'Repeated fatal events must not duplicate backup searches');
+ assert.equal(wrongPosts,0);assert.ok(backupSearches-beforeSearch<=maxSearches,'Repeated fatal events must not duplicate backup searches');
  await page.evaluate(()=>$('.selectbox .selector').filter(function(){return $(this).text().includes('Filmix')&&$(this).text().includes('Dnipro');}).first().trigger('hover:enter'));
  await page.waitForFunction(()=>Lampa.Player.playdata()?.xot_source==='filmix'&&document.querySelector('video')?.currentTime>=64&&document.querySelector('video')?.videoWidth>0&&!document.querySelector('video')?.paused,{timeout:30000});
  const switched=await page.evaluate(()=>{const p=Lampa.Player.playdata(),v=document.querySelector('video');return {source:p.xot_source,season:p.season,episode:p.episode,position:v.currentTime,width:v.videoWidth,queue:Lampa.PlayerPlaylist.get().map(x=>({season:x.season,episode:x.episode,lazy:typeof x.url==='function'}))};});
@@ -57,6 +59,6 @@ try{
  assert.equal(await page.evaluate(()=>document.querySelector('video')?.videoWidth||0),0,'The stalled video never became playable');
  await page.evaluate(()=>Lampa.Player.close());releaseStreams();assert.equal(await page.evaluate(()=>$('body').hasClass('selectbox--open')),false,'Closing the player also closes its backup dialog');
  assert.deepEqual(exceptions,[]);
- console.log(JSON.stringify({origin,choices,switched,nextEpisodePlayed:true,unrelatedPosts:wrongPosts,lateBackupCancelled:true,startupWatchdogMs:startupDelay,exceptions},null,2));
+ console.log(JSON.stringify({origin,aggregate,choices,switched,nextEpisodePlayed:true,unrelatedPosts:wrongPosts,lateBackupCancelled:true,startupWatchdogMs:startupDelay,exceptions},null,2));
 }catch(error){for(const page of browser.contexts().flatMap(c=>c.pages()))console.error(await page.evaluate(()=>({rows:window.jQuery?$('.xot-native-row').text():null,select:window.jQuery?$('.selectbox').text():null,source:window.Lampa?.Player.playdata?.()?.xot_source,video:[...document.querySelectorAll('video')].map(v=>({time:v.currentTime,width:v.videoWidth,paused:v.paused,error:v.error?.code}))})).catch(()=>({})));throw error;}
 finally{releaseStreams();await browser.close();}
