@@ -31,6 +31,8 @@ jobs:
           node --check worker/backend.js
           node --check worker/index.js
           node --check server/index.mjs
+          node --check scripts/smoke-assets.mjs
+          node --check scripts/smoke-features.mjs
           npm test
       - name: Build Worker and static asset routing
         run: npx wrangler deploy --config wrangler.toml --dry-run --outdir /tmp/xot-worker

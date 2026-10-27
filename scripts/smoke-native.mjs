@@ -1,10 +1,12 @@
 // Manual integration check against real Lampa and live providers, not a CI unit test.
 import assert from 'node:assert/strict';
 import {chromium} from 'playwright-core';
+import {serveLocalAssets} from './smoke-assets.mjs';
 const origin=process.env.XOT_TEST_ORIGIN||'https://xot-online.ai-beta69690.workers.dev';
 const browser=await chromium.launch({headless:true,...(process.env.PLAYWRIGHT_EXECUTABLE_PATH?{executablePath:process.env.PLAYWRIGHT_EXECUTABLE_PATH}:{})});
 try{
  const page=await browser.newPage({viewport:{width:1440,height:900}}),exceptions=[],forbidden=[];
+ await serveLocalAssets(page,origin);
  page.on('pageerror',e=>exceptions.push(e.message));
  page.on('request',r=>{if(r.resourceType()==='script'&&/online_mod|\/lumio\.js/.test(r.url()))forbidden.push(r.url());});
  await page.goto('https://yumata.github.io/lampa/',{waitUntil:'domcontentloaded',timeout:30000});
@@ -14,7 +16,7 @@ try{
  await page.waitForFunction(()=>Lampa.Activity.active(),{timeout:20000});
  await page.evaluate(()=>{
   window.xotTestMovie={id:460458,title:'Оселя зла: Вітаємо у Раккун-Сіті',original_title:'Resident Evil: Welcome to Raccoon City',release_date:'2021-11-24',imdb_id:'tt6920084',source:'tmdb',overview:'Перевірка власних балансерів ХОТ',vote_average:5.9};
-  Lampa.Storage.set('xot_native_source','filmix');Lampa.Storage.set('xot_native_last_sources',{});
+  Lampa.Storage.set('xot_native_source','filmix');Lampa.Storage.set('xot_prefer_ukrainian',false);Lampa.Storage.set('xot_native_last_sources',{});
   $('body').append('<div class="full-start-new__buttons xot-test-fixture"><div class="full-start__button selector button--play"><svg viewBox="0 0 32 32"><path d="m8 4 20 12-20 12z"/></svg><span>Перегляд</span></div><div class="full-start__button selector view--online"><svg viewBox="0 0 32 32"><circle cx="16" cy="16" r="12"/></svg><span>Інший плагін</span></div><div class="full-start__button selector button--book"><span>Закладки</span></div><div class="full-start__button selector button--options"><span>Ще</span></div></div>');
  });
  await page.addScriptTag({url:origin+'/m.js'});

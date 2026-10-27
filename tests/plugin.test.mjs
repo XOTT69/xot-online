@@ -32,7 +32,7 @@ function harness({card=movie,ready=true,stored={},early=false,expose=false}={}) 
  context.window=context;
  if(early)delete context.Lampa;
  function advance(ms){const end=now+ms;let count=0;while(true){const due=[...timers].filter(([,v])=>v.at<=end).sort((a,b)=>a[1].at-b[1].at)[0];if(!due)break;if(++count>1000)throw Error('timer loop');now=due[1].at;timers.delete(due[0]);due[1].fn();}now=end;}
- function boot(){const code=expose?plugin.replace(/\}\)\(\);\s*$/, 'window.__testMatching={matches:matches,names:names,voiceKey:voiceKey};})();'):plugin;runInNewContext(code,context);advance(350);}
+ function boot(){const code=expose?plugin.replace(/\}\)\(\);\s*$/, 'window.__testMatching={matches:matches,names:names,get:get,voiceKey:voiceKey,ukrainian:ukrainian,chooseQuality:chooseQuality,episodeGroups:episodeGroups};})();'):plugin;runInNewContext(code,context);advance(350);}
  function enter(){assert.ok(button,'movie button is mounted');button.handlers['hover:enter']();}
  return {context,Lampa,values,components,scripts,pushes,notices,menus,timers,listeners,boot,advance,enter,get button(){return button;}};
 }
@@ -74,4 +74,29 @@ test('client refuses same-year unrelated titles, sequels and remakes by default'
 test('client retains distinct voice IDs when displayed labels are the same',()=>{
  const h=harness({expose:true});h.boot();const {voiceKey}=h.context.__testMatching;
  assert.notEqual(voiceKey({voice_id:'one',translation:'Voice'}),voiceKey({voice_id:'two',translation:'Voice'}));
+});
+test('Ukrainian preference recognizes explicit language labels without guessing from studio names',()=>{
+ const h=harness({expose:true});h.boot();const {ukrainian}=h.context.__testMatching;
+ for(const item of [{translation:'Дубльований [Український | 1080p+]'},{translation:'Украинский'},{translation:'UKR · Studio'},{translation:'Оригінал',language:'uk-UA'},{translation:'UA'},{translation:'🇺🇦'}])assert.equal(ukrainian(item),true);
+ for(const translation of ['Русский','Оригинал','HDrezka Studio','AMC','Dual audio'])assert.equal(ukrainian({translation}),false);
+});
+test('A disabled language preference survives Lampa truthy-default storage behavior',()=>{
+ const h=harness({expose:true,stored:{xot_prefer_ukrainian:false}});
+ h.Lampa.Storage.get=(key,fallback)=>h.values[key]||fallback||'';
+ h.Lampa.Storage.value=key=>key in h.values?String(h.values[key]):'';
+ h.boot();assert.equal(h.context.__testMatching.get('xot_prefer_ukrainian',true),false);assert.equal(h.context.__testMatching.get('unset',true),true);
+});
+test('Quality selection keeps a requested cap and falls back only to available secure streams',()=>{
+ const h=harness({expose:true});h.boot();const {chooseQuality}=h.context.__testMatching;
+ const items=[480,1080,720].map(q=>({quality:q+'p',url:'https://cdn.example/'+q+'.m3u8'}));
+ assert.equal(chooseQuality(items,720).url,'https://cdn.example/720.m3u8');assert.equal(chooseQuality(items,2160).url,'https://cdn.example/1080.m3u8');assert.equal(chooseQuality(items,0).url,'https://cdn.example/1080.m3u8');
+ assert.equal(chooseQuality(items.filter(x=>x.quality!=='720p'),720).url,'https://cdn.example/480.m3u8');
+ assert.equal(chooseQuality([{quality:'Авто',url:'https://cdn.example/master.m3u8'}],1080).url,'https://cdn.example/master.m3u8');
+ assert.equal(chooseQuality([{quality:'2160p',url:'javascript:alert(1)'}],2160).url,undefined);
+});
+test('Episode queues sort seasons and original episode numbers without mixing sources or voices',()=>{
+ const h=harness({expose:true});h.boot();const {episodeGroups}=h.context.__testMatching;
+ const row=(season,episode,provider='eneyida',voice_id='ua')=>({season,episode,provider,voice_id});
+ const items=[row(2,1),row(1,10),row(1,1),row(1,1),row(2,2,'filmix'),row(2,2,'eneyida','ru'),row(0,0)];
+ const groups=episodeGroups(items,row(1,1));assert.equal(groups.length,3);assert.deepEqual(JSON.parse(JSON.stringify(groups.map(x=>[x[0].season,x[0].episode]))),[[1,1],[1,10],[2,1]]);assert.equal(groups[0].length,2);
 });

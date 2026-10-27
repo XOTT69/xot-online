@@ -12,7 +12,7 @@
   source = source || 'https://xot-online.ai-beta69690.workers.dev/m.js';
   var url = new URL('online.js', source);
   window.__XOT_API_BASE__ = url.origin;
-  url.searchParams.set('v', '0.3.4');
+  url.searchParams.set('v', '0.3.5');
   window.__XOT_LOADER_PENDING__ = true;
   var attempts = 0;
   function fail() {

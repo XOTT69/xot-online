@@ -1,12 +1,14 @@
 // Live end-to-end check: actual Lampa, source menu, CDN playback and lazy episodes.
 import assert from 'node:assert/strict';
 import {chromium} from 'playwright-core';
+import {serveLocalAssets} from './smoke-assets.mjs';
 const origin=process.env.XOT_TEST_ORIGIN||'https://xot-online.ai-beta69690.workers.dev';
 const sourceId=process.argv[2]||'eneyida',sourceName={eneyida:'Eneyida',kinovezha:'KinoVezha',uaserials:'UASerials'}[sourceId];
 assert.ok(sourceName,'Unknown public player source');
 const browser=await chromium.launch({headless:true,...(process.env.PLAYWRIGHT_EXECUTABLE_PATH?{executablePath:process.env.PLAYWRIGHT_EXECUTABLE_PATH}:{})});
 try{
  const page=await browser.newPage({viewport:{width:1440,height:900}}),exceptions=[],forbidden=[],streamRequests=[];
+ await serveLocalAssets(page,origin);
  page.on('pageerror',e=>exceptions.push(e.message));
  page.on('request',r=>{
   if(r.resourceType()==='script'&&/online_mod|\/lumio\.js/.test(r.url()))forbidden.push(r.url());
