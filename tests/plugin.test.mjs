@@ -28,11 +28,11 @@ function harness({card=movie,ready=true,stored={},early=false,expose=false}={}) 
  const document={readyState:'complete',currentScript:null,querySelector:()=>null,
   getElementsByTagName:()=>[],createElement:tag=>({tag,setAttribute(){}}),head};
  const context={Lampa,document,jQuery:jquery,URL,URLSearchParams,Uint8Array,console:{info(){},log(){},warn(){},error(){}},
-  Date:{now:()=>now},setTimeout:(fn,ms)=>{const id=++nextTimer;timers.set(id,{at:now+ms,fn});return id;},clearTimeout:id=>timers.delete(id)};
+  Date:class extends Date{constructor(...args){super(...(args.length?args:[now]));}static now(){return now;}},setTimeout:(fn,ms)=>{const id=++nextTimer;timers.set(id,{at:now+ms,fn});return id;},clearTimeout:id=>timers.delete(id)};
  context.window=context;
  if(early)delete context.Lampa;
  function advance(ms){const end=now+ms;let count=0;while(true){const due=[...timers].filter(([,v])=>v.at<=end).sort((a,b)=>a[1].at-b[1].at)[0];if(!due)break;if(++count>1000)throw Error('timer loop');now=due[1].at;timers.delete(due[0]);due[1].fn();}now=end;}
- function boot(){const code=expose?plugin.replace(/\}\)\(\);\s*$/, 'window.__testMatching={matches:matches,names:names,get:get,voiceKey:voiceKey,ukrainian:ukrainian,chooseQuality:chooseQuality,episodeGroups:episodeGroups,backupGroups:backupGroups,deliveryFamily:deliveryFamily,streamItem:streamItem,sourcePreferences:sourcePreferences,sourceEnabled:sourceEnabled,orderedSources:orderedSources,preferredSource:preferredSource,displayGroups:displayGroups,cachedSearch:cachedSearch,favoriteIdentity:favoriteIdentity,favoriteVoices:favoriteVoices,favoriteVoice:favoriteVoice,watchCardKey:watchCardKey,watchHash:watchHash,watchProfile:watchProfile,watchHistory:watchHistory,rememberWatch:rememberWatch,watchProgress:watchProgress,watchTime:watchTime,latestUnfinished:latestUnfinished,nextUnwatched:nextUnwatched,watchValues:watchValues,undoEligible:undoEligible,clearSearchCache:function(){searchCache.clear();},cacheKeys:function(){return Array.from(searchCache.keys());}};})();'):plugin;runInNewContext(code,context);advance(350);}
+ function boot(){const code=expose?plugin.replace(/\}\)\(\);\s*$/, 'window.__testMatching={matches:matches,names:names,get:get,voiceKey:voiceKey,ukrainian:ukrainian,chooseQuality:chooseQuality,episodeGroups:episodeGroups,backupGroups:backupGroups,deliveryFamily:deliveryFamily,streamItem:streamItem,sourcePreferences:sourcePreferences,sourceEnabled:sourceEnabled,orderedSources:orderedSources,preferredSource:preferredSource,displayGroups:displayGroups,cachedSearch:cachedSearch,favoriteIdentity:favoriteIdentity,favoriteVoices:favoriteVoices,favoriteVoice:favoriteVoice,watchCardKey:watchCardKey,watchHash:watchHash,watchProfile:watchProfile,watchHistory:watchHistory,rememberWatch:rememberWatch,watchProgress:watchProgress,watchTime:watchTime,latestUnfinished:latestUnfinished,nextUnwatched:nextUnwatched,watchValues:watchValues,undoEligible:undoEligible,qualityProfile:qualityProfile,qualityLimit:qualityLimit,recordSourceHealth:recordSourceHealth,sourceHealth:sourceHealth,rankedGroups:rankedGroups,subtitleOptions:subtitleOptions,publishedSubtitles:publishedSubtitles,introSettings:introSettings,cleanSeason:cleanSeason,futureEpisode:futureEpisode,trackedShows:trackedShows,seriesInventory:seriesInventory,mergeSeriesCheck:mergeSeriesCheck,clearSearchCache:function(){searchCache.clear();},cacheKeys:function(){return Array.from(searchCache.keys());}};})();'):plugin;runInNewContext(code,context);advance(350);}
  function enter(){assert.ok(button,'movie button is mounted');button.handlers['hover:enter']();}
  return {context,Lampa,values,components,scripts,pushes,notices,menus,timers,listeners,boot,advance,enter,get button(){return button;}};
 }
@@ -235,4 +235,58 @@ test('Undo restores raw values only while the edited mark has not changed',()=>{
  assert.equal(undoEligible({...after,time:99,updated:100},entry),false);
  assert.equal(undoEligible({...after,updated:100},{...entry,applied:false}),false);
  assert.equal(watchValues({percent:Infinity,time:-5,duration:NaN}).time,0);
+});
+test('Quality profiles preserve an existing manual cap and do not claim unavailable resolutions',()=>{
+ const h=harness({expose:true,stored:{video_quality_default:2160}});h.boot();const api=h.context.__testMatching;
+ assert.equal(api.qualityProfile(),'custom');assert.equal(api.qualityLimit(),2160);
+ h.values.xot_quality_profile='economy';h.values.video_quality_default=720;assert.equal(api.qualityProfile(),'economy');assert.equal(api.qualityLimit(),720);
+ assert.equal(api.chooseQuality([{url:'https://cdn.example/480.m3u8',quality:'480p'}],api.qualityLimit()).url,'https://cdn.example/480.m3u8');
+ h.values.video_quality_default=1080;assert.equal(api.qualityProfile(),'custom','A manual quality change detaches the saved profile');
+});
+test('Smart ranking keeps episodes chronological, respects studios and quality, then uses actual playback evidence',()=>{
+ const h=harness({expose:true,stored:{video_quality_default:720,xot_prefer_ukrainian:true,xot_favorite_voices:[{title:'Favorite',language:'uk'}]}});h.boot();const api=h.context.__testMatching;
+ const group=(provider,episode,translation='Other',quality='720p',language='uk')=>({items:[{provider,season:1,episode,translation,quality,language}]});
+ const first=group('eneyida',1),favorite=group('uaserials',1,'Favorite'),next=group('eneyida',2,'Favorite');assert.equal(api.rankedGroups([next,first,favorite],['eneyida','uaserials'])[0],favorite);assert.equal(api.rankedGroups([next,first,favorite],['eneyida','uaserials'])[2],next);
+ h.values.xot_favorite_voices=[];const low=group('eneyida',1,'Other','480p');assert.equal(api.rankedGroups([low,first],['eneyida'])[0],first);
+ for(let i=0;i<2;i++)api.recordSourceHealth({xot_verified:true,xot_source:'uaserials',xot_profile:'file_view'},true,500);
+ assert.equal(api.rankedGroups([first,group('uaserials',1)],['eneyida','uaserials'])[0].items[0].provider,'uaserials');
+ for(let i=0;i<2;i++)api.recordSourceHealth({xot_verified:true,xot_source:'eneyida',xot_profile:'file_view'},false,0);
+ assert.equal(api.rankedGroups([first,group('uaserials',1,'Other','480p')],['eneyida','uaserials'])[0].items[0].provider,'uaserials','Repeated failures rank below a successful lower-resolution alternative');
+ h.values.xot_smart_sort=false;assert.equal(api.rankedGroups([next,first],['eneyida'])[0],next);
+});
+test('Playback health is bounded, profile-scoped and ignores unverified or duplicate events',()=>{
+ const h=harness({expose:true});let profile='file_view_1';h.Lampa.Timeline={filename:()=>profile};h.boot();const api=h.context.__testMatching,work={xot_verified:true,xot_source:'eneyida',xot_profile:profile,url:'https://cdn.example/private.m3u8'};
+ api.recordSourceHealth(work,true,800);api.recordSourceHealth(work,true,300);assert.equal(api.sourceHealth().eneyida.samples.length,1);
+ api.recordSourceHealth(work,false,0);assert.equal(api.sourceHealth().eneyida.samples.length,1);assert.equal(api.sourceHealth().eneyida.samples[0],false,'A later fatal failure changes this launch’s outcome without creating another launch');
+ api.recordSourceHealth({...work,xot_health_recorded:false,xot_verified:false},false,0);assert.equal(api.sourceHealth().eneyida.samples.length,1);
+ for(let i=0;i<20;i++)api.recordSourceHealth({...work,xot_health_recorded:false},false,0);assert.equal(api.sourceHealth().eneyida.samples.length,10);assert.ok(!JSON.stringify(h.values.xot_source_health_file_view_1).includes('private.m3u8'));
+ profile='file_view_2';assert.equal(Object.keys(api.sourceHealth()).length,0);api.recordSourceHealth({...work,xot_health_recorded:false},true,1);assert.equal(Object.keys(api.sourceHealth()).length,0);
+ h.values.xot_source_health_file_view_2={eneyida:null,ufdub:{samples:['bad',true],startup:Infinity}};assert.equal(api.sourceHealth().ufdub.samples.length,1);
+});
+test('Episode metadata sanitizes the requested season and marks future dates without inventing availability',()=>{
+ const h=harness({expose:true});h.boot();const api=h.context.__testMatching;
+ const season=api.cleanSeason({season_number:1,episodes:[{season_number:1,episode_number:1,name:'Pilot',overview:'Description',air_date:'1970-01-01',url:'secret'},{season_number:2,episode_number:1},{episode_number:0}]},1);
+ assert.equal(season.episodes.length,1);assert.equal(season.episodes[0].name,'Pilot');assert.equal(season.episodes[0].url,undefined);assert.equal(api.cleanSeason({season_number:2,episodes:[]},1),null);
+ assert.equal(api.futureEpisode({air_date:'1970-01-02'}),true);assert.equal(api.futureEpisode({air_date:'1970-01-01'}),false);assert.equal(api.futureEpisode({}),false);
+});
+test('Subtitle settings and published tracks reject invalid URLs and preserve language labels',()=>{
+ const h=harness({expose:true,stored:{xot_subtitles:{language:'uk',size:'large',delay:300}}});h.boot();const api=h.context.__testMatching;
+ assert.equal(api.subtitleOptions().delay,120);assert.equal(api.subtitleOptions().language,'uk');
+ const tracks=api.publishedSubtitles({subtitles:[{label:'Українська',language:'uk',url:'https://cdn.example/uk.vtt?key=valid'},{url:'javascript:alert(1)'},{url:'http://cdn.example/en.srt'},{url:'https://user:password@cdn.example/en.srt'},{url:'https://cdn.example/movie.m3u8'},{url:'https://cdn.example/uk.vtt?key=valid'}]});
+ assert.equal(tracks.length,1);assert.equal(tracks[0].language,'uk');assert.equal(tracks[0].index,0);
+});
+test('Intro intervals are per card and profile, disabled by default and bounded',()=>{
+ const h=harness({expose:true});let profile='file_view_1';h.Lampa.Timeline={filename:()=>profile};h.boot();const api=h.context.__testMatching,card={id:42,name:'Series',source:'tmdb'};
+ assert.equal(api.introSettings(card),null);h.values.xot_intros_file_view_1={[api.watchCardKey(card)]:{start:30,end:90}};assert.equal(api.introSettings(card).end,90);assert.equal(api.introSettings(movie),null);
+ profile='file_view_2';assert.equal(api.introSettings(card),null);profile='file_view_1';h.values.xot_intros_file_view_1[api.watchCardKey(card)]={start:90,end:30};assert.equal(api.introSettings(card),null);
+});
+test('Series update detection requires a baseline, exact voice identity and new episode numbers',()=>{
+ const h=harness({expose:true});h.boot();const api=h.context.__testMatching,record={card:{id:42,name:'Series'},provider:'eneyida',translation:'Studio',language:'uk',episodes:['1|1','1|3'],pending:[],checked:0,updated:1};
+ const items=[{season:1,episode:4,translation:'Studio',language:'uk'},{season:1,episode:5,translation:'Different',language:'uk'},{season:1,episode:6,translation:'Studio',language:'ru'}];
+ const keys=api.seriesInventory(items,record);assert.equal(keys.length,1);assert.equal(keys[0],'1|4');
+ const merged=api.mergeSeriesCheck(record,['1|2','1|3','1|4','2|1']);assert.equal(merged.pending.join(','),'1|4,2|1','Backfilled older episodes are not new releases');assert.equal(api.mergeSeriesCheck({...record,episodes:[]},keys).pending.length,0);
+});
+test('Tracked shows keep only metadata and do not leak another profile’s records',()=>{
+ const h=harness({expose:true});let profile='file_view_1';h.Lampa.Timeline={filename:()=>profile};h.boot();const api=h.context.__testMatching;
+ h.values.xot_tracked_shows_file_view_1=[{card:{id:42,name:'Series',original_name:'Series',first_air_date:'2022-01-01',source:'tmdb',url:'secret'},provider:'eneyida',translation:'Studio',episodes:['1|1','bad','1|1'],pending:['1|2'],updated:1,url:'secret',device_token:'token'}];const list=api.trackedShows();assert.equal(list.length,1);assert.equal(list[0].episodes.length,1);assert.ok(!/secret|token|url/.test(JSON.stringify(list)));profile='file_view_2';assert.equal(api.trackedShows().length,0);
 });

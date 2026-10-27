@@ -23,6 +23,8 @@ export function trustedURL(value,kind='media'){
   if(url.origin!==ORIGIN)throw Error('eneyida_invalid_url');
  }else if(kind==='player'){
   if(!['hdvbua.pro','tortuga.tw','tortuga.wtf'].includes(host)||!/^\/(?:vid|vod|embd|embed)\/[a-z0-9/_-]+$/i.test(url.pathname)||url.searchParams.has('tr'))throw Error('eneyida_invalid_url');
+ }else if(kind==='subtitle'){
+  if(!/(?:^|\.)(?:hdvbua\.pro|tortuga\.tw|tortuga\.wtf)$/.test(host)||!/^.*\.(?:srt|vtt)$/i.test(url.pathname)||url.href.length>4000)throw Error('eneyida_invalid_url');
  }else if(!/(?:^|\.)(?:hdvbua\.pro|tortuga\.tw|tortuga\.wtf)$/.test(host)||!url.pathname.endsWith('.m3u8'))throw Error('eneyida_invalid_url');
  return url;
 }
@@ -83,12 +85,13 @@ export function parseEneyidaPost(html,path){
 }
 
 // Read public PlayerJS data literals. Page scripts are never evaluated.
-export function playerFile(html){
+export function playerFile(html,field='file'){
+ if(!['file','subtitle'].includes(field))throw Error('eneyida_player_format');
  const root=parseDocument(html);
  for(const script of all(root,n=>n.name==='script'&&!n.attribs?.src)){
   const source=DomUtils.textContent(script),start=source.search(/new\s+(?:Playerjs|TortugaCore)\s*\(/i);
   if(start<0)continue;
-  const fragment=source.slice(start),match=/\bfile\s*:\s*/.exec(fragment);
+  const fragment=source.slice(start),match=new RegExp('\\b'+field+'["\']?\\s*:\\s*').exec(fragment);
   if(!match)continue;
   const at=match.index+match[0].length,quote=fragment[at];
   if(quote==='"'||quote==="'"){
@@ -114,6 +117,17 @@ export function playerFile(html){
   }
  }
  throw Error('eneyida_player_format');
+}
+export function parseSubtitles(value,validate=(url)=>trustedURL(url,'subtitle')){
+ let list=Array.isArray(value)?value:[];
+ if(typeof value==='string'&&value.length<=100000)list=Array.from(value.matchAll(/(?:^|,)\s*\[([^\]]{1,100})\](https:\/\/[^\s]+?)(?=,\s*\[[^\]]{1,100}\]https:\/\/|$)/g),match=>({label:match[1],url:match[2]}));
+ const seen=new Set(),result=[];
+ for(const entry of list.slice(0,40)){
+  if(!entry||typeof entry.url!=='string')continue;let url;try{url=validate(entry.url).toString();}catch{continue;}
+  if(seen.has(url))continue;seen.add(url);const label=clean(entry.label||entry.language||'Субтитри',100),language=/(?:укра[їи]н|\b(?:uk|ukr|ua)\b)/iu.test(label)?'uk':/(?:англій|англий|\b(?:en|eng|english)\b)/iu.test(label)?'en':clean(entry.language,20);
+  result.push({label,language,url});if(result.length===20)break;
+ }
+ return result;
 }
 function decodePublicFile(value){
  const raw=String(value||'').trim();if(raw.startsWith('https://')||raw.startsWith('['))return raw;
@@ -143,6 +157,7 @@ export function playerInventory(file,post,validate=trustedURL){
   if(season)next.season=season;
   if(episode)next.episode=episode;
   if(label&&!season&&!episode)next.translation=label;
+  if(node.subtitle||node.subtitles)next.subtitles=parseSubtitles(node.subtitle||node.subtitles);
   if(Array.isArray(node.folder)){walk(node.folder,next,depth+1);return;}
   if(typeof node.file!=='string')return;
   const s=next.season||(post.series?1:null),e=next.episode||null;
@@ -154,7 +169,8 @@ export function playerInventory(file,post,validate=trustedURL){
    let url;try{url=validate(raw).toString();}catch{continue;}
    const translation=clean(labelled?.[1])||next.translation||post.translation||'Українська';
    const key=[url,s,e,translation].join('|');if(seen.has(key))continue;seen.add(key);
-   items.push({title:post.title,source:post.source||'Eneyida',provider:post.provider||'eneyida',translation,voice_id:(post.provider||'eneyida')+':'+translation,season:s,episode:e,url,quality:'Авто',needs_resolve:true,...(post.language?{language:post.language}:{})});
+   const packed=track.match(/\(subtitle:([\s\S]+)\)\s*$/),subtitles=parseSubtitles(packed?packed[1]:next.subtitles||post.subtitles||[]);
+   items.push({title:post.title,source:post.source||'Eneyida',provider:post.provider||'eneyida',translation,voice_id:(post.provider||'eneyida')+':'+translation,season:s,episode:e,url,quality:'Авто',needs_resolve:true,...(subtitles.length?{subtitles}:{}),...(post.language?{language:post.language}:{})});
   }
  }
  walk(data);
@@ -165,9 +181,10 @@ export function hlsQualities(body,base,validate=trustedURL){
  if(!body.trimStart().startsWith('#EXTM3U'))throw Error('eneyida_invalid_playlist');
  const lines=body.split(/\r?\n/),items=[];
  if(lines.some(l=>/^#EXT-X-(?:KEY|SESSION-KEY):/.test(l)&&(/METHOD=SAMPLE-AES|KEYFORMAT="(?!identity")/i.test(l))))throw Error('eneyida_unsupported_stream');
- let pending=null,hasAudio=false;
+ let pending=null,hasAudio=false,hasSubtitles=false;
  for(const line of lines){
   if(/^#EXT-X-MEDIA:.*TYPE=AUDIO/.test(line)&&/URI=/.test(line))hasAudio=true;
+  if(/^#EXT-X-MEDIA:.*TYPE=SUBTITLES/.test(line)&&/URI=/.test(line))hasSubtitles=true;
   if(line.startsWith('#EXT-X-STREAM-INF:')){pending=line;continue;}
   if(!pending||!line.trim()||line.startsWith('#'))continue;
   const resolution=pending.match(/RESOLUTION=(\d+)x(\d+)/i),width=Number(resolution?.[1]),pixels=Number(resolution?.[2]);
@@ -177,7 +194,7 @@ export function hlsQualities(body,base,validate=trustedURL){
   pending=null;
  }
  // Keep the master when video-only variants depend on a separate audio group.
- if(hasAudio&&items.length)return [{quality:'Авто',url:validate(base).toString(),available_qualities:items.map(item=>item.quality)}];
+ if((hasAudio||hasSubtitles)&&items.length)return [{quality:'Авто',url:validate(base).toString(),available_qualities:items.map(item=>item.quality)}];
  if(items.length)return items.sort((a,b)=>parseInt(b.quality)-parseInt(a.quality));
  if(lines.some(line=>line.startsWith('#EXTINF:')))return [{quality:'Авто',url:validate(base).toString()}];
  throw Error('eneyida_invalid_playlist');
@@ -188,7 +205,8 @@ export async function resolvePlayerItem(item){
 }
 export async function loadPublicPlayer(url,post,referer){
  const player=await upstream(url,'player',{referer});
- return playerInventory(playerFile(player.body),post);
+ let subtitles=[];try{subtitles=parseSubtitles(playerFile(player.body,'subtitle'));}catch{}
+ return playerInventory(playerFile(player.body),{...post,...(subtitles.length?{subtitles}:{})});
 }
 export async function handleEneyida(request){
  if(request.method==='OPTIONS')return new Response(null,{status:204,headers:HEADERS});

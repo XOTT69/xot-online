@@ -1,6 +1,6 @@
 {
   "name": "xot-online",
-  "version": "0.3.14",
+  "version": "0.3.15",
   "private": true,
   "type": "module",
   "scripts": {
@@ -23,7 +23,9 @@
     "smoke:serialno": "node scripts/smoke-serialno.mjs",
     "smoke:watch": "node scripts/smoke-watch.mjs",
     "smoke:favorite-voices": "node scripts/smoke-favorite-voices.mjs",
-    "smoke:watch-controls": "node scripts/smoke-watch-controls.mjs"
+    "smoke:watch-controls": "node scripts/smoke-watch-controls.mjs",
+    "smoke:comfort": "node scripts/smoke-comfort.mjs",
+    "smoke:player-comfort": "node scripts/smoke-player-comfort.mjs"
   },
   "devDependencies": {
     "playwright-core": "^1.61.1",

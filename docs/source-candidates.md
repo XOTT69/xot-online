@@ -4,6 +4,10 @@ Checked on 2026-10-26. Eneyida, KinoVezha and UASerials are now native adapters.
 UFDub was added in v0.3.11 after Cloudflare and Lampa playback checks. Other
 entries remain research candidates, not enabled providers.
 
+## Recheck on 2026-10-27 for v0.3.15
+
+Kinobase, HDVB and UAFlix were checked again from a temporary Cloudflare Worker. None passed direct-video availability: Kinobase exposed no ready playlist; the guest HDVB API returned 404; UAFlix exposed real catalog iframes but all three inspected Zetvideo players returned a 155-character HTML 404 document with HTTP 200. These later results supersede earlier candidate availability notes; no new balancer is enabled. Full request paths, limits and primary references: [v0.3.15 audit](comfort-0315.md#13-перевірка-кандидатів-у-джерела).
+
 ## Serialno — implemented and verified in v0.3.12
 
 - Public catalog: <https://serialno.tv/>. Search uses the normal DLE form and

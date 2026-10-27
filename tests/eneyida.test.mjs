@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {parseEneyidaSearch,parseEneyidaPost,playerFile,playerInventory,hlsQualities,handleEneyida} from '../worker/eneyida.js';
+import {parseEneyidaSearch,parseEneyidaPost,playerFile,playerInventory,hlsQualities,handleEneyida,parseSubtitles} from '../worker/eneyida.js';
 import worker from '../worker/index.js';
 
 const path='/6785-resident-evil.html',master='https://s30.hdvbua.pro/media/film/index.m3u8';
@@ -10,6 +10,19 @@ const search=`<aside>${card(9,'Wrong','Wrong',2021)}</aside><div id="dle-content
 const page=`<article class="full"><h1>Оселя зла: Вітаємо в Раккун-Сіті</h1><div class="full_header-subtitle">Resident Evil: Welcome to Raccoon City</div><ul id="full_info"><li>Рік: 2021</li><li>Жанр: фільм • жахи</li><li>Звук: LeDoyen # DUB</li></ul><div class="tabs_b visible"><iframe src="https://hdvbua.pro/vid/72599"></iframe></div><div class="tabs_b" id="trailer_place"><iframe src="https://hdvbua.pro/vid/72156?tr=1"></iframe></div></article>`;
 const masterBody='#EXTM3U\n#EXT-X-STREAM-INF:RESOLUTION=1920x794,BANDWIDTH=2128000\n1080/index.m3u8\n#EXT-X-STREAM-INF:RESOLUTION=1280x528,BANDWIDTH=1096000\n720/index.m3u8\n#EXT-X-STREAM-INF:RESOLUTION=854x352,BANDWIDTH=714000\n480/index.m3u8\n';
 const player=file=>`<script>new Playerjs({id:"main",file:${JSON.stringify(file)}});</script>`;
+
+test('Published subtitles are literal data on trusted HTTPS hosts and stay attached to the exact episode',()=>{
+ const subtitle='[Українська]https://s30.hdvbua.pro/subs/uk.vtt,[English]https://s30.hdvbua.pro/subs/en.srt';
+ assert.equal(parseSubtitles(subtitle).length,2);assert.equal(parseSubtitles(subtitle)[0].language,'uk');assert.equal(parseSubtitles(subtitle)[1].language,'en');
+ assert.equal(parseSubtitles('[English]https://s30.hdvbua.pro/subs/en.srt?token=one,two,[Українська]https://s30.hdvbua.pro/subs/uk.vtt')[0].url,'https://s30.hdvbua.pro/subs/en.srt?token=one,two','Signed parameters containing commas stay intact');
+ assert.equal(parseSubtitles('[Bad]https://private.example/sub.srt,[Bad]http://s30.hdvbua.pro/sub.srt').length,0);
+ const html=`<script>new Playerjs({file:${JSON.stringify(master)},subtitle:${JSON.stringify(subtitle)}}); window.evil();</script>`;assert.equal(playerFile(html,'subtitle'),subtitle);
+ const items=playerInventory(JSON.stringify([{title:'1 сезон',folder:[{title:'1 серія',file:master,subtitle},{title:'2 серія',file:master+'?episode=2'}]}]),{title:'Show',series:true});assert.equal(items[0].subtitles.length,2);assert.equal(items[1].subtitles,undefined);
+ const packed=playerInventory(JSON.stringify([{title:'1 сезон',folder:[{title:'1 серія',file:master+'(subtitle:'+subtitle+')'}]}]),{title:'Show',series:true});assert.equal(packed[0].subtitles.length,2);assert.equal(packed[0].url,master);
+});
+test('HLS subtitle groups keep the master instead of dropping language tracks from video-only variants',()=>{
+ const body='#EXTM3U\n#EXT-X-MEDIA:TYPE=SUBTITLES,GROUP-ID="subs",NAME="Українська",LANGUAGE="uk",URI="subs/index.m3u8"\n#EXT-X-STREAM-INF:BANDWIDTH=2000000,RESOLUTION=1920x1080,SUBTITLES="subs"\n1080/index.m3u8';const items=hlsQualities(body,master);assert.equal(items.length,1);assert.equal(items[0].url,master);assert.equal(items[0].available_qualities[0],'1080p');
+});
 
 test('Eneyida parses only search cards, preserves English identity, year and series type',()=>{
  const results=parseEneyidaSearch(search);assert.equal(results.length,2);assert.equal(results[0].original_title,'Resident Evil: Welcome to Raccoon City');assert.equal(results[0].year,2021);assert.equal(results[0].series,false);assert.equal(results[1].series,true);
