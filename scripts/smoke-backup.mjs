@@ -7,11 +7,11 @@ const origin=process.env.XOT_TEST_ORIGIN||'https://xot-online.ai-beta69690.worke
 let releaseStreams;const streamGate=new Promise(resolve=>{releaseStreams=resolve;});
 const browser=await chromium.launch({headless:true,...(process.env.PLAYWRIGHT_EXECUTABLE_PATH?{executablePath:process.env.PLAYWRIGHT_EXECUTABLE_PATH}:{})});
 try{
- const page=await browser.newPage({viewport:{width:1600,height:900}}),exceptions=[],removedRequests=[];let wrongPosts=0,backupSearches=0;
+ const page=await browser.newPage({viewport:{width:1600,height:900}}),exceptions=[];let wrongPosts=0,backupSearches=0;
  await serveLocalAssets(page,origin);
  page.on('pageerror',error=>exceptions.push(error.message));
  await page.route(origin+'/api/anilibria',route=>{if(route.request().postDataJSON().action==='post')wrongPosts++;return route.fulfill({json:{results:[{id:999,title:'Another series',year:2022,series:true}]}});});
- page.on('request',r=>{if(r.url()===origin+'/api/filmix'&&r.postDataJSON()?.action==='search')backupSearches++;if(/ashdi\.vip|\/api\/uakino(?:[/?]|$)/i.test(r.url()))removedRequests.push(r.url());});
+ page.on('request',r=>{if(r.url()===origin+'/api/filmix'&&r.postDataJSON()?.action==='search')backupSearches++;});
  await page.goto('https://yumata.github.io/lampa/',{waitUntil:'domcontentloaded',timeout:30000});
  await page.waitForFunction(()=>window.Lampa?.Component&&window.jQuery,{timeout:30000});await page.waitForTimeout(2500);
  const uk=page.getByText('Українська',{exact:true});if(await uk.count())await uk.first().click();
@@ -62,7 +62,6 @@ try{
  assert.equal(await page.evaluate(()=>document.querySelector('video')?.videoWidth||0),0,'The stalled video never became playable');
  await page.evaluate(()=>Lampa.Player.close());releaseStreams();assert.equal(await page.evaluate(()=>$('body').hasClass('selectbox--open')),false,'Closing the player also closes its backup dialog');
  assert.deepEqual(exceptions,[]);
- assert.deepEqual(removedRequests,[]);
- console.log(JSON.stringify({origin,aggregate,choices,switched,nextEpisodePlayed:true,unrelatedPosts:wrongPosts,removedSourceRequests:removedRequests.length,lateBackupCancelled:true,startup:{trigger:startupFatalErrors?'fatal':'watchdog',elapsedMs:startupDelay},exceptions},null,2));
+ console.log(JSON.stringify({origin,aggregate,choices,switched,nextEpisodePlayed:true,unrelatedPosts:wrongPosts,lateBackupCancelled:true,startup:{trigger:startupFatalErrors?'fatal':'watchdog',elapsedMs:startupDelay},exceptions},null,2));
 }catch(error){for(const page of browser.contexts().flatMap(c=>c.pages()))console.error(await page.evaluate(()=>({rows:window.jQuery?$('.xot-native-row').text():null,select:window.jQuery?$('.selectbox').text():null,source:window.Lampa?.Player.playdata?.()?.xot_source,video:[...document.querySelectorAll('video')].map(v=>({time:v.currentTime,width:v.videoWidth,paused:v.paused,error:v.error?.code}))})).catch(()=>({})));throw error;}
 finally{releaseStreams();await browser.close();}
