@@ -2,6 +2,59 @@
 
 Checked on 2026-10-26. Eneyida, KinoVezha and UASerials are now native adapters.
 Other entries remain research candidates, not enabled providers.
+
+## Additional candidates checked on 2026-10-27
+
+These checks use normal public catalog/player requests. Neither candidate is
+enabled in v0.3.10. Site access, a manifest and partial media access do not yet
+establish a finished Lampa adapter or compatibility with every TV.
+
+### UAFlix — promising next catalog
+
+- Current site: <https://uafix.net/>. The public movie page
+  <https://uafix.net/films/protu-yragany/> publishes both a Zetvideo player and
+  an Ashdi player. The inspected alternative is the published Zetvideo player,
+  not an alternate address for a blocked Ashdi request.
+- <https://zetvideo.net/vod/69920> supplies a public HLS master with actual
+  1920×804, 1280×536 and 854×356 variants (1080p/720p/480p). The inspected
+  media playlist declares approximately 5,866.58 seconds and EXT-X-ENDLIST.
+- From a temporary Cloudflare Worker, the catalog page, master and variant
+  playlist return HTTP 200. The HLS master exposes CORS `*`. Its media segments
+  use the published CDN `video.zetvideo.net`.
+- A byte-range request to that published segment from Cloudflare returns
+  HTTP 206, `video/mp2t`, CORS `*` and 1,024 bytes. No region change, authentication
+  or challenge bypass is involved. This remains partial-media validation, not
+  a complete Lampa playback test.
+- A native adapter still needs exact movie identity checks, current search and
+  episode parsing, voice preservation and actual Lampa playback validation.
+- Primary adapter reference:
+  <https://github.com/CakesTwix/cloudstream-extensions-uk/blob/master/UAFlixProvider/src/main/kotlin/com/lagradost/UAFlixProvider.kt>.
+
+### UFDub — separate public video infrastructure
+
+- Current site: <https://ufdub.com/>. The inspected page
+  <https://ufdub.com/anime/454-rokuhoudou-yotsuiro-biyori.html> publishes a
+  `video.ufdub.com` player with numbered episode links.
+- Its public `ufdub.com/video/VIDEOS.php` episode endpoint redirects to a
+  published MP4 on `api.ufdub.com`. From Cloudflare, a byte-range request to that
+  media returns HTTP 206 and 1,024 bytes, with `application/octet-stream` and
+  no Access-Control-Allow-Origin header. Native MP4 playback and seeking in
+  Lampa still need to be tested; no quality tier is claimed from the filename.
+- The Location header may contain a non-ASCII filename. A future adapter must
+  handle the redirect encoding correctly and restrict it to the known media
+  host rather than forwarding arbitrary URLs.
+- Primary adapter reference:
+  <https://github.com/CakesTwix/cloudstream-extensions-uk/blob/master/UFDubProvider/src/main/kotlin/com/lagradost/UFDubProvider.kt>.
+
+### Candidates not selected as Ashdi replacements
+
+- <https://cikava-ideya.top/70-resident-alien.html> publishes episode players on
+  Ashdi in its public Player1 data.
+- <https://kinotron.tv/149-simpsony-ukrainskoyu-onlain.html> likewise publishes
+  an Ashdi serial player.
+- These are different catalogs, but the checked examples do not provide a
+  different video host for this Worker. Other titles or future site changes
+  would need another independent check.
 The original checks below ran from the development machine. Eneyida subsequently
 passed Cloudflare Worker search/post checks and actual Lampa/Chromium playback:
 the 2021 Resident Evil film at 720p (1280 pixels wide) and 1080p (1920 pixels wide),
@@ -83,13 +136,16 @@ the selected episode's video manifest was resolved. See `scripts/smoke-public-pl
 - The browser test also verifies the separate header voice control for series and
   that only the selected episode's video manifest is requested.
 
-## UAKino audit (v0.3.6–0.3.7; restored for testing in v0.3.9)
+## Archived UAKino audit (v0.3.6–0.3.7; removed in v0.3.10)
 
-The native adapter was removed in v0.3.8 and restored at the user's request in
-v0.3.9 for another test. It uses the same published Ashdi player. Restoration is
-not a fix for the regional restriction and does not establish successful
-playback. The generic JSON-API placeholder remains removed; `/api/uakino` is the
-native route. Aggregate results still omit unavailable sources.
+UAKino/Ashdi was removed at the user's request in v0.3.10. It is absent from the
+balancer picker, aggregate and backup searches, API registry and native Worker
+routes. The implementation and its provider-specific tests were removed; Git
+history retains the earlier work. The observations below describe that earlier
+audit, not an available current adapter.
+
+The user also confirmed the same regional error on Django Unchained after the
+brief v0.3.9 restoration. v0.3.10 removes that test adapter again.
 
 The current public catalog is <https://uakino.eu/>, rather than the older
 `uakino.best` / `uakino.top` addresses. Its public search and exact movie identity
@@ -133,8 +189,7 @@ selection retains the regional restriction message. No hosting change was made.
    voices/episodes, and direct HLS playback; verified on a Cloudflare Worker.
 2. KinoVezha: implemented and verified film/series playback from Cloudflare.
 3. UASerials: implemented current tab decoding and verified film/series playback.
-4. UAKino: adapter implemented; Ashdi currently region-restricts the Worker.
-5. Revisit UAFilm only if ordinary public access works.
+4. Revisit UAFilm only if ordinary public access works.
 
 For every provider, show only qualities actually advertised by its media
 playlist. These checks do not establish free 2160p availability.

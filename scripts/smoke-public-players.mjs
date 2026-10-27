@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {chromium} from 'playwright-core';
 import {serveLocalAssets} from './smoke-assets.mjs';
 const origin=process.env.XOT_TEST_ORIGIN||'https://xot-online.ai-beta69690.workers.dev';
-const sourceId=process.argv[2]||'eneyida',sourceName={eneyida:'Eneyida',kinovezha:'KinoVezha',uaserials:'UASerials',uakino:'UAKino'}[sourceId];
+const sourceId=process.argv[2]||'eneyida',sourceName={eneyida:'Eneyida',kinovezha:'KinoVezha',uaserials:'UASerials'}[sourceId];
 assert.ok(sourceName,'Unknown public player source');
 const browser=await chromium.launch({headless:true,...(process.env.PLAYWRIGHT_EXECUTABLE_PATH?{executablePath:process.env.PLAYWRIGHT_EXECUTABLE_PATH}:{})});
 try{
@@ -37,10 +37,7 @@ try{
  await page.evaluate(()=>$('.filter--sort').trigger('hover:enter'));
  await page.waitForFunction(sourceName=>$('.selectbox').text().includes(sourceName),sourceName);
  await page.evaluate(sourceName=>$('.selectbox .selector').filter(function(){return $(this).text().trim()===sourceName;}).first().trigger('hover:enter'),sourceName);
- await page.waitForFunction(sourceId=>Lampa.Storage.get('xot_native_source')===sourceId&&$('.xot-native-row.selector').length>0&&($('.xot-native-row__note').text().includes('1080p')||$('.xot-native-row').text().includes('обмежив доступ із регіону')),sourceId,{timeout:30000});
- const restricted=await page.evaluate(()=>$('.xot-native-row').text().includes('обмежив доступ із регіону'));
- if(restricted){assert.equal(sourceId,'uakino');assert.equal(await page.locator('video').count(),0);assert.deepEqual(exceptions,[]);console.log(JSON.stringify({origin,source:sourceId,status:'region_restricted',playbackConfirmed:false,readableRestriction:true,exceptions},null,2));}
- else{
+ await page.waitForFunction(sourceId=>Lampa.Storage.get('xot_native_source')===sourceId&&$('.xot-native-row.selector').length>0&&$('.xot-native-row__note').text().includes('1080p'),sourceId,{timeout:30000});
  const movieRows=await page.evaluate(()=>$('.xot-native-row').map(function(){return {title:$(this).find('.xot-native-row__title').text(),note:$(this).find('.xot-native-row__note').text()};}).get());
  assert.equal(movieRows.length,1);
  if(process.env.XOT_SCREENSHOT){await page.waitForTimeout(1500);await page.screenshot({path:process.env.XOT_SCREENSHOT});}
@@ -78,7 +75,6 @@ try{
  assert.equal(streamRequests.length,1);assert.equal(streamRequests[0].season,2);assert.equal(episode.season,2);assert.equal(episode.episode,1);assert.ok(episode.qualities.includes('720p'));
  assert.deepEqual(exceptions,[]);assert.equal(forbidden.length,0);
  console.log(JSON.stringify({origin,source:sourceId,movieRows,playback,series:{seasonOneRows:seasonOne,resolvedEpisodes:streamRequests.length,played:episode},thirdPartyScripts:forbidden.length,exceptions},null,2));
- }
 }catch(error){
  console.error(error);
  for(const page of browser.contexts().flatMap(context=>context.pages())){

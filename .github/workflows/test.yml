@@ -28,7 +28,6 @@ jobs:
           node --check worker/anilibria.js
           node --check worker/eneyida.js
           node --check worker/ukrainian.js
-          node --check worker/uakino.js
           node --check worker/backend.js
           node --check worker/index.js
           node --check server/index.mjs

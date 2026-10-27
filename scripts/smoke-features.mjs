@@ -6,11 +6,12 @@ const browser=await chromium.launch({headless:true,...(process.env.PLAYWRIGHT_EX
 let releaseRezka,releaseEpisode;
 const rezkaGate=new Promise(resolve=>{releaseRezka=resolve;}),episodeGate=new Promise(resolve=>{releaseEpisode=resolve;});
 try{
- const page=await browser.newPage({viewport:{width:1600,height:900}}),exceptions=[],streams=[];let unrelatedPosts=0,episodeWaiting=false,aggregateMode=false,emptyMode=false,rezkaPending=0;
+ const page=await browser.newPage({viewport:{width:1600,height:900}}),exceptions=[],streams=[],removedRequests=[];let unrelatedPosts=0,episodeWaiting=false,aggregateMode=false,emptyMode=false,rezkaPending=0;
  await serveLocalAssets(page,origin);
  await page.route(origin+'/api/providers',route=>route.fulfill({json:{providers:[{id:'catalog',name:'XOT Catalog',enabled:true}]}}));
  await page.route(origin+'/api/search*',route=>route.fulfill({json:{results:[{title:'Unrelated movie',year:2021,provider:'catalog',url:'https://cdn.example/unrelated.m3u8',quality:'1080p',score:100}],provider_status:[]}}));
  page.on('pageerror',error=>exceptions.push(error.message));
+ page.on('request',request=>{if(/ashdi\.vip|\/api\/uakino(?:[/?]|$)/i.test(request.url()))removedRequests.push(request.url());});
  await page.route(origin+'/api/rezka',async route=>{rezkaPending++;await rezkaGate;try{await route.fulfill({status:502,json:{error:'rezka_access_denied'}});}catch{}finally{rezkaPending--;}});
  const unavailableFixture={translation:'XOT unavailable fixture',voice_id:'locked',quality_cap:480,available_qualities:['1080p'],season:99,episode:1,reason:'quality_limit'};
  await page.route(origin+'/api/filmix',async route=>{
@@ -19,7 +20,7 @@ try{
   if(aggregateMode&&input.action==='post'){const response=await route.fetch(),data=await response.json();data.unavailable=(data.unavailable||[]).concat(unavailableFixture);return route.fulfill({response,json:data});}
   await route.continue();
  });
- for(const id of ['kinovezha','uaserials','uakino'])await page.route(origin+'/api/'+id,route=>emptyMode?route.fulfill(id==='uakino'?{status:502,json:{error:'uakino_region_restricted'}}:{json:{results:[]}}):route.continue());
+ for(const id of ['kinovezha','uaserials'])await page.route(origin+'/api/'+id,route=>emptyMode?route.fulfill({json:{results:[]}}):route.continue());
  await page.route(origin+'/api/anilibria',async route=>{const body=route.request().postDataJSON();if(body.action==='post')unrelatedPosts++;await route.fulfill({json:{results:[{id:999,title:'Unrelated movie',year:2021,series:false}]}});});
  await page.route(origin+'/api/eneyida',async route=>{
   const body=route.request().postDataJSON();
@@ -35,7 +36,7 @@ try{
  const ukrainian=page.getByText('Українська',{exact:true});if(await ukrainian.count())await ukrainian.first().click();
  await page.waitForFunction(()=>Lampa.Activity.active());
  await page.evaluate(()=>{
-  Lampa.Storage.set('xot_native_source','filmix');Lampa.Storage.set('xot_native_last_sources',{});Lampa.Storage.set('xot_native_voices',{});Lampa.Storage.set('xot_prefer_ukrainian',true);Lampa.Storage.set('video_quality_default',1080);
+  Lampa.Storage.set('xot_native_source','uakino');Lampa.Storage.set('xot_native_last_sources',{460458:'uakino'});Lampa.Storage.set('xot_native_voices',{});Lampa.Storage.set('xot_prefer_ukrainian',true);Lampa.Storage.set('video_quality_default',1080);
   $('body').append('<div class="full-start__buttons xot-test-fixture"></div>');
   const original=Lampa.Player.play;window.xotPlays=[];Lampa.Player.play=function(data){window.xotPlays.push({url:data.url,qualities:Object.keys(data.quality||{}),title:data.title});return original.apply(this,arguments);};
  });
@@ -98,12 +99,15 @@ try{
  assert.equal(await page.locator('.xot-native-row').count(),2,'One empty message and one retry replace individual source failures');
  assert.equal(await page.locator('.xot--voice:visible').count(),0,'Unavailable-only voices are excluded from aggregate filters');
  assert.equal(await page.evaluate(()=>/UAKino|HDRezka|fixture|помилка|недоступне/.test($('.xot-native-row').text())),false);
- await page.evaluate(()=>$('.filter--sort').trigger('hover:enter'));await choose('UAKino',true);
- await page.waitForFunction(()=>$('.xot-native-row').text().includes('обмежив доступ із регіону'));
+ await page.evaluate(()=>$('.filter--sort').trigger('hover:enter'));
+ assert.equal(await page.evaluate(()=>/UAKino|Ashdi/i.test($('.selectbox').text())),false,'The removed balancer is absent from the picker');
+ await choose('HDRezka',true);
+ await page.waitForFunction(()=>$('.xot-native-row').text().includes('обмеження доступу'));
  await page.evaluate(()=>$('.filter--sort').trigger('hover:enter'));await choose('Filmix',true);
  await page.waitForFunction(()=>$('.xot-native-row').text().includes('XOT unavailable fixture'));
  assert.equal(await page.locator('.xot--voice:visible').count(),1,'An individual balancer still explains unavailable voices');
  assert.deepEqual(exceptions,[]);
- console.log(JSON.stringify({origin,ukrainianDefault:true,manualVoiceRestored:true,allSources:{partial,failedSourceDidNotBlock:true,onlyFoundResults:true,emptyAndUnavailableHidden:true,emptyMessageAndRetry:true,individualDiagnosticsPreserved:true,unrelatedPosts},quality:{fallback,nextPreferred:next.preferred},playlist:{entries:queue.length,lazy:true,next,lateResponseCancelled:true},exceptions},null,2));
+ assert.deepEqual(removedRequests,[]);
+ console.log(JSON.stringify({origin,removedSource:{oldPreferenceFallsBack:true,absentFromPicker:true,requests:removedRequests.length},ukrainianDefault:true,manualVoiceRestored:true,allSources:{partial,failedSourceDidNotBlock:true,onlyFoundResults:true,emptyAndUnavailableHidden:true,emptyMessageAndRetry:true,individualDiagnosticsPreserved:true,unrelatedPosts},quality:{fallback,nextPreferred:next.preferred},playlist:{entries:queue.length,lazy:true,next,lateResponseCancelled:true},exceptions},null,2));
 }catch(error){for(const page of browser.contexts().flatMap(c=>c.pages()))console.error(await page.evaluate(()=>({rows:window.jQuery?$('.xot-native-row').text():null,select:window.jQuery?$('.selectbox').text():null,playing:window.Lampa?.Player.playdata?.()})).catch(()=>({})));throw error;}
 finally{releaseRezka();releaseEpisode();await browser.close();}
