@@ -32,7 +32,7 @@ function harness({card=movie,ready=true,stored={},early=false,expose=false}={}) 
  context.window=context;
  if(early)delete context.Lampa;
  function advance(ms){const end=now+ms;let count=0;while(true){const due=[...timers].filter(([,v])=>v.at<=end).sort((a,b)=>a[1].at-b[1].at)[0];if(!due)break;if(++count>1000)throw Error('timer loop');now=due[1].at;timers.delete(due[0]);due[1].fn();}now=end;}
- function boot(){const code=expose?plugin.replace(/\}\)\(\);\s*$/, 'window.__testMatching={matches:matches,names:names,get:get,voiceKey:voiceKey,ukrainian:ukrainian,chooseQuality:chooseQuality,episodeGroups:episodeGroups,backupGroups:backupGroups,deliveryFamily:deliveryFamily};})();'):plugin;runInNewContext(code,context);advance(350);}
+ function boot(){const code=expose?plugin.replace(/\}\)\(\);\s*$/, 'window.__testMatching={matches:matches,names:names,get:get,voiceKey:voiceKey,ukrainian:ukrainian,chooseQuality:chooseQuality,episodeGroups:episodeGroups,backupGroups:backupGroups,deliveryFamily:deliveryFamily,streamItem:streamItem};})();'):plugin;runInNewContext(code,context);advance(350);}
  function enter(){assert.ok(button,'movie button is mounted');button.handlers['hover:enter']();}
  return {context,Lampa,values,components,scripts,pushes,notices,menus,timers,listeners,boot,advance,enter,get button(){return button;}};
 }
@@ -110,4 +110,12 @@ test('Backup candidates preserve exact episode, reject failed delivery families 
  const groups=backupGroups(rows,{season:2,episode:3},new Set(['hdvbua']));assert.equal(groups.length,1);assert.equal(groups[0][0].provider,'catalog_a');
  assert.equal(backupGroups(rows,{season:2,episode:3},new Set(['hdvbua','cdn.example'])).length,0);
  assert.equal(backupGroups(rows,{},new Set()).length,0,'A movie must not fall back to a series');
+});
+test('Only native UFDub descriptors can enter lazy queues and they cannot be played as media URLs',()=>{
+ const h=harness({expose:true});h.boot();const {streamItem,chooseQuality,backupGroups,deliveryFamily,matches}=h.context.__testMatching;
+ const item={provider:'ufdub',post_id:'454',needs_resolve:true,resolve_url:'https://ufdub.com/video/VIDEOS.php?ID=454&TAB=Main&Seriya=Three&POS=3',season:1,episode:3,voice_id:'uk'};
+ assert.equal(streamItem(item),true);assert.equal(chooseQuality([item],1080).url,undefined);assert.equal(backupGroups([item],{season:1,episode:3},new Set()).length,1);
+ assert.equal(deliveryFamily(item.resolve_url),deliveryFamily('https://api.ufdub.com/UFDUB_UPLOAD/VIDEO/one.mp4'));assert.equal(backupGroups([item],{season:1,episode:3},new Set(['ufdub'])).length,0);
+ for(const bad of [{...item,provider:'catalog'},{...item,post_id:'999'},{...item,resolve_url:item.resolve_url.replace('ufdub.com','attacker.example')},{...item,resolve_url:item.resolve_url+'&ID=454'},{...item,needs_resolve:false}])assert.equal(streamItem(bad),false);
+ assert.equal(matches({title:'Alternate',alternative_titles:[movie.original_title],year:2021,series:false},movie),true);assert.equal(matches({title:'Alternate',alternative_titles:[movie.original_title+' 2'],year:2021,series:false},movie),false);
 });

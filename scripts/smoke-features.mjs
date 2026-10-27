@@ -20,7 +20,7 @@ try{
   if(aggregateMode&&input.action==='post'){const response=await route.fetch(),data=await response.json();data.unavailable=(data.unavailable||[]).concat(unavailableFixture);return route.fulfill({response,json:data});}
   await route.continue();
  });
- for(const id of ['kinovezha','uaserials'])await page.route(origin+'/api/'+id,route=>emptyMode?route.fulfill({json:{results:[]}}):route.continue());
+ for(const id of ['kinovezha','uaserials','ufdub'])await page.route(origin+'/api/'+id,route=>emptyMode?route.fulfill({json:{results:[]}}):route.continue());
  await page.route(origin+'/api/anilibria',async route=>{const body=route.request().postDataJSON();if(body.action==='post')unrelatedPosts++;await route.fulfill({json:{results:[{id:999,title:'Unrelated movie',year:2021,series:false}]}});});
  await page.route(origin+'/api/eneyida',async route=>{
   const body=route.request().postDataJSON();

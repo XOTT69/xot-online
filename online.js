@@ -1,7 +1,7 @@
 (function () {
 'use strict';
 if (!window.Lampa || window.__XOT_ONLINE_INITIALIZED__) return;
-var VERSION='0.3.10', DEFAULT_API='https://xot-online.ai-beta69690.workers.dev';
+var VERSION='0.3.11', DEFAULT_API='https://xot-online.ai-beta69690.workers.dev';
 var API_BASE=window.__XOT_API_BASE__ || (function () {
  var scripts=document.getElementsByTagName('script');
  for(var i=scripts.length-1;i>=0;i--){
@@ -12,7 +12,7 @@ var API_BASE=window.__XOT_API_BASE__ || (function () {
  }
  return DEFAULT_API;
 })();
-var BASE_SOURCES=[{id:'all',title:'Усі джерела',kind:'aggregate'},{id:'filmix',title:'Filmix',kind:'native'},{id:'eneyida',title:'Eneyida',kind:'native'},{id:'kinovezha',title:'KinoVezha',kind:'native'},{id:'uaserials',title:'UASerials',kind:'native'},{id:'rezka',title:'HDRezka',kind:'native'},{id:'anilibria',title:'AniLibria · аніме',kind:'native'}];
+var BASE_SOURCES=[{id:'all',title:'Усі джерела',kind:'aggregate'},{id:'filmix',title:'Filmix',kind:'native'},{id:'eneyida',title:'Eneyida',kind:'native'},{id:'kinovezha',title:'KinoVezha',kind:'native'},{id:'uaserials',title:'UASerials',kind:'native'},{id:'ufdub',title:'UFDub',kind:'native'},{id:'rezka',title:'HDRezka',kind:'native'},{id:'anilibria',title:'AniLibria · аніме',kind:'native'}];
 var lastCard=null,buttonTimers=[],screenCounter=0;
 function notify(message){if(Lampa.Noty)Lampa.Noty.show(message);}
 function get(key,fallback){try{
@@ -42,9 +42,9 @@ function matches(item,card){
  if(typeof item.series==='boolean'&&item.series!==Boolean(card.name||card.first_air_date||card.media_type==='tv'))return false;
  if(card.imdb_id&&item.imdb_id)return card.imdb_id===item.imdb_id;
  var expected=names(card).map(normalized);
- return [item.title,item.original_title].filter(Boolean).map(normalized).some(function(value){return expected.indexOf(value)>=0;});
+ return [item.title,item.original_title].concat(item.alternative_titles||[]).filter(function(value){return typeof value==='string';}).map(normalized).some(function(value){return expected.indexOf(value)>=0;});
 }
-function publicPlayerSource(id){return ['eneyida','kinovezha','uaserials'].indexOf(id)>=0;}
+function publicPlayerSource(id){return ['eneyida','kinovezha','uaserials','ufdub'].indexOf(id)>=0;}
 function voiceKey(item){return item.voice_id||item.translation||'Оригінал';}
 function ukrainian(item){
  var language=String(item.language||item.lang||item.audio_language||'').toLowerCase();
@@ -64,16 +64,21 @@ function episodeGroups(items,current){
  return Array.from(groups.values()).sort(function(a,b){return a[0].season-b[0].season||a[0].episode-b[0].episode;});
 }
 function deliveryFamily(value){
- try{var host=new URL(value).hostname;if(/(?:^|\.)(?:hdvbua\.pro|tortuga\.(?:tw|wtf))$/.test(host))return 'hdvbua';return host;}catch(e){return '';}
+ try{var host=new URL(value).hostname;if(/(?:^|\.)(?:hdvbua\.pro|tortuga\.(?:tw|wtf))$/.test(host))return 'hdvbua';if(/(?:^|\.)ufdub\.com$/.test(host))return 'ufdub';return host;}catch(e){return '';}
 }
 function backupGroups(items,current,blocked){
  var groups=new Map(),seen=new Set();
- items.filter(function(item){return media(item.url)&&!blocked.has(deliveryFamily(item.url))&&(current.episode?item.season===current.season&&item.episode===current.episode:!item.episode);}).forEach(function(item){var key=item.provider+'|'+voiceKey(item);if(!groups.has(key))groups.set(key,[]);groups.get(key).push(item);});
- return Array.from(groups.values()).filter(function(group){var key=group.map(function(item){return item.url;}).sort().join('|');if(seen.has(key))return false;seen.add(key);return true;});
+ items.filter(function(item){return streamItem(item)&&!blocked.has(deliveryFamily(item.url||item.resolve_url))&&(current.episode?item.season===current.season&&item.episode===current.episode:!item.episode);}).forEach(function(item){var key=item.provider+'|'+voiceKey(item);if(!groups.has(key))groups.set(key,[]);groups.get(key).push(item);});
+ return Array.from(groups.values()).filter(function(group){var key=group.map(function(item){return item.url||item.resolve_url;}).sort().join('|');if(seen.has(key))return false;seen.add(key);return true;});
 }
 
 function safeText(value){return String(value==null?'':value).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
 function media(value){try{var u=new URL(value);return u.protocol==='https:'&&!u.username&&!u.password&&/\.(?:m3u8|mp4|mpd)(?:$|:hls:)/i.test(u.pathname);}catch(e){return false;}}
+function streamItem(item){
+ if(media(item.url))return true;
+ if(item.provider!=='ufdub'||item.needs_resolve!==true||!/^\d{1,8}$/.test(String(item.post_id)))return false;
+ try{var u=new URL(item.resolve_url),keys=Array.from(u.searchParams.keys());return u.origin==='https://ufdub.com'&&!u.username&&!u.password&&!u.hash&&u.pathname==='/video/VIDEOS.php'&&u.searchParams.get('ID')===String(item.post_id)&&/^[1-9]\d{0,4}$/.test(u.searchParams.get('POS')||'')&&Boolean(u.searchParams.get('Seriya'))&&keys.length===4&&new Set(keys).size===4&&keys.every(function(k){return ['ID','TAB','Seriya','POS'].indexOf(k)>=0;});}catch(e){return false;}
+}
 function identity(){
  var id=get('xot_filmix_device_id','');if(/^[a-f0-9]{32}$/.test(id))return id;
  var bytes=new Uint8Array(16);
@@ -88,8 +93,8 @@ function preferredSource(card){
 function readableError(error){
  var code=error&&error.message||String(error||'');
  var eneyidaErrors={eneyida_movie_mismatch:'Сторінка Eneyida не відповідає вибраному фільму. Уточни назву через пошук угорі.',eneyida_access_denied:'Eneyida обмежила доступ. Спробуй інший балансер.',eneyida_timeout:'Eneyida не відповіла вчасно.',eneyida_player_not_found:'На сторінці Eneyida не знайдено доступного плеєра.',eneyida_player_format:'Eneyida змінила формат плеєра.',eneyida_invalid_playlist:'Eneyida не повернула придатного відеоплейліста.',eneyida_stream_unavailable:'Для цього фільму або серії Eneyida не повернула відео.',eneyida_unsupported_stream:'Цей формат відео Eneyida поки не підтримується.',eneyida_unavailable:'Eneyida зараз недоступна. Повтори запит або вибери інший балансер.'};
- var publicError=code.match(/^(kinovezha|uaserials)_(.+)$/);
- if(publicError){var name={kinovezha:'KinoVezha',uaserials:'UASerials'}[publicError[1]];return (eneyidaErrors['eneyida_'+publicError[2]]||'Eneyida не відповіла коректно. Повтори запит або вибери інший балансер.').replace(/Eneyida/g,name);}
+ var publicError=code.match(/^(kinovezha|uaserials|ufdub)_(.+)$/);
+ if(publicError){var name={kinovezha:'KinoVezha',uaserials:'UASerials',ufdub:'UFDub'}[publicError[1]];return (eneyidaErrors['eneyida_'+publicError[2]]||'Eneyida не відповіла коректно. Повтори запит або вибери інший балансер.').replace(/Eneyida/g,name);}
  if(eneyidaErrors[code])return eneyidaErrors[code];
  var errors={anilibria_unavailable:'AniLibria зараз недоступна. Спробуй інший балансер.',anilibria_timeout:'AniLibria не відповіла вчасно.',anilibria_restricted:'AniLibria обмежила доступ до цього релізу.',anilibria_invalid_response:'AniLibria змінила формат відповіді.',filmix_unavailable:'Filmix зараз недоступний. Перемкни балансер або повтори пошук.',filmix_timeout:'Filmix не відповів вчасно.',filmix_http_403:'Filmix обмежив доступ.',filmix_http_401:'Filmix відхилив авторизацію. Від’єднай пристрій або перевір акаунт.',filmix_invalid_json:'Filmix повернув невідомий формат відповіді.',rezka_access_denied:'HDRezka повернула 403 або обмеження доступу. Спробуй інший балансер.',rezka_mirror_redirect:'Адреса HDRezka змінилася. Потрібно оновити адресу джерела на сервері.',rezka_player_not_found:'На сторінці HDRezka не знайдено доступного плеєра.',rezka_stream_unavailable:'Це відео або озвучення HDRezka зараз недоступне.',rezka_timeout:'HDRezka не відповіла вчасно.',rezka_unavailable:'Не вдалося з’єднатися з HDRezka.',rezka_unsupported_stream_format:'HDRezka змінила формат відповіді плеєра.',request_timeout:'Сервер не відповів вчасно. Повтори запит.',invalid_response:'Сервер повернув некоректну відповідь.'};
  return errors[code]||'Джерело не відповіло коректно ('+code.slice(0,70)+').';
@@ -272,7 +277,7 @@ function registerScreen(){
       group.data=data;
       if(which.id==='rezka'){group.status='open';}
       else{
-       var found=(data.items||[]).filter(function(item){return media(item.url);}).map(function(item){return Object.assign({},item,{provider:which.id,xot_source_name:which.title});});
+       var found=(data.items||[]).filter(streamItem).map(function(item){return Object.assign({},item,{provider:which.id,xot_source_name:which.title});});
        var locked=(data.unavailable||[]).map(function(item){return Object.assign({},item,{provider:which.id,xot_source_name:which.title,quality_cap:data.quality_cap});});
        streams=streams.concat(found);unavailable=unavailable.concat(locked);group.count=new Set(found.map(function(item){return [item.season,item.episode,voiceKey(item)].join('|');})).size;
        group.status=found.length?'ready':'empty';
@@ -300,7 +305,7 @@ function registerScreen(){
    var operation=begin();postVerified=matches(item,card);loading('Завантажуємо озвучення '+source().title+'…');
    request(sourceId,'post',postPayload(item,source()),operation.signal).then(function(data){
     if(!current(operation.token))return;finish();post=data;post.title=data.title||item.title;
-    if(sourceId!=='rezka'){streams=(data.items||[]).filter(function(x){return media(x.url);});unavailable=data.unavailable||[];qualityCap=data.quality_cap||null;restoreVoice();state='streams';drawStreams();}
+    if(sourceId!=='rezka'){streams=(data.items||[]).filter(streamItem);unavailable=data.unavailable||[];qualityCap=data.quality_cap||null;restoreVoice();state='streams';drawStreams();}
     else{
      var saved=get('xot_native_voices',{})[voicePreferenceKey()],options=data.translations||[];
      var preferred=saved&&options.filter(function(v){return v.id===saved.id&&v.title===saved.title;})[0];
@@ -394,6 +399,18 @@ function registerScreen(){
    var key=[data.season||0,data.episode||0].join('|');if(key!==backupEpisode){backupEpisode=key;failedFamilies.clear();}
    lastPosition=Number(data.xot_resume)||0;armStartup(data);
   }
+  function onPlayerReady(data){
+   if(!data||data.xot_owner!==owner||data.xot_source!=='ufdub')return;
+   var url;try{url=new URL(data.url);}catch(e){return;}
+   if(url.origin!=='https://api.ufdub.com'||!/^\/UFDUB_UPLOAD\/VIDEO\/[^/]+\.mp4$/i.test(url.pathname))return;
+   var video=Lampa.PlayerVideo.video();
+   // UFDub publishes ordinary MP4s without CORS headers. Lampa creates every
+   // HTML5 video with crossorigin=anonymous; use normal native MP4 embedding
+   // for this source only. HLS, other sources and native TV objects are untouched.
+   if(video&&video.removeAttribute&&video.hasAttribute('crossorigin')){
+    video.removeAttribute('crossorigin');video.load();var playing=video.play();if(playing&&playing.catch)playing.catch(function(){});
+   }
+  }
   function armStartup(data){clearTimeout(bootTimer);bootTimer=setTimeout(function(){if(!destroyed&&playerData()===data&&Lampa.Player.opened())offerBackup(data);},15000);}
   function onCanPlay(){
    var data=playerData();if(!data||data.xot_owner!==owner)return;clearTimeout(bootTimer);
@@ -425,7 +442,7 @@ function registerScreen(){
    if(Lampa.PlayerVideo.pause)Lampa.PlayerVideo.pause();notify('Шукаємо резервні джерела для цього відео…');
    function showChoices(){
     if(!backupValid(context)||context.shown)return;context.shown=true;clearTimeout(context.timer);
-    var seen=new Set(),choices=context.choices.filter(function(choice){var key=choice.items.map(function(row){return row.url;}).sort().join('|');if(seen.has(key))return false;seen.add(key);return true;});
+    var seen=new Set(),choices=context.choices.filter(function(choice){var key=choice.items.map(function(row){return row.url||row.resolve_url;}).sort().join('|');if(seen.has(key))return false;seen.add(key);return true;});
     choices.sort(function(a,b){return Number(ukrainian(b.items[0])===ukrainian(item))-Number(ukrainian(a.items[0])===ukrainian(item));});
     var options=choices.map(function(choice){return {title:safeText(choice.source.title+' · '+(choice.items[0].translation||'Оригінал')),subtitle:safeText(Array.from(new Set(choice.items.flatMap(function(row){return row.available_qualities||[row.quality];}).filter(Boolean))).join(' · ')),choice:choice};});
     if(!options.length)options.push({title:'Повторити пошук резерву',retry:true});
@@ -449,7 +466,7 @@ function registerScreen(){
      return request(which.id,'post',postPayload(exact[0],which,true),operation.signal);
     }).then(function(data){
      if(!data||!backupValid(context)||context.shown)return;
-     var inventory=(data.items||[]).filter(function(row){return media(row.url);}).map(function(row){return Object.assign({},row,{provider:which.id,xot_source_name:which.title});});
+     var inventory=(data.items||[]).filter(streamItem).map(function(row){return Object.assign({},row,{provider:which.id,xot_source_name:which.title});});
      backupGroups(inventory,item,failedFamilies).forEach(function(group){context.choices.push({source:which,data:data,inventory:inventory,items:group});});
     });
    })).then(showChoices);
@@ -561,7 +578,7 @@ function registerScreen(){
    voiceButton=$('<div class="simple-button simple-button--filter selector xot--voice"><span>Озвучення</span><div></div></div>');
    voiceButton.insertBefore(filter.render().find('.filter--filter'));
    if(Lampa.PlayerPanel&&Lampa.PlayerPanel.listener)Lampa.PlayerPanel.listener.follow('quality',onPlayerQuality);
-   if(Lampa.Player.listener){Lampa.Player.listener.follow('create',onPlayerCreate);Lampa.Player.listener.follow('start',onPlayerStart);Lampa.Player.listener.follow('destroy',onPlayerDestroy);}
+   if(Lampa.Player.listener){Lampa.Player.listener.follow('create',onPlayerCreate);Lampa.Player.listener.follow('start',onPlayerStart);Lampa.Player.listener.follow('ready',onPlayerReady);Lampa.Player.listener.follow('destroy',onPlayerDestroy);}
    if(Lampa.PlayerVideo&&Lampa.PlayerVideo.listener){Lampa.PlayerVideo.listener.follow('canplay',onCanPlay);Lampa.PlayerVideo.listener.follow('timeupdate',onTimeUpdate);}
    var voiceActivated=0;voiceButton.on('hover:enter click',function(){var now=Date.now();if(now-voiceActivated<450)return;voiceActivated=now;chooseVoice();});
    filter.onSearch=function(value){query=String(value||'').trim();if(!query)return;manual=true;params.search=query;filter.render().find('.filter--search div').text(query);lookup();};
@@ -607,7 +624,7 @@ function registerScreen(){
    var playing=playerData();if(playing&&playing.xot_owner===owner&&Lampa.Player.opened&&Lampa.Player.opened())Lampa.Player.close();
    destroyed=true;stopRequests();providerController.abort();clearTimeout(providerTimer);
    if(Lampa.PlayerPanel&&Lampa.PlayerPanel.listener)Lampa.PlayerPanel.listener.remove('quality',onPlayerQuality);
-   if(Lampa.Player.listener){Lampa.Player.listener.remove('create',onPlayerCreate);Lampa.Player.listener.remove('start',onPlayerStart);Lampa.Player.listener.remove('destroy',onPlayerDestroy);}
+   if(Lampa.Player.listener){Lampa.Player.listener.remove('create',onPlayerCreate);Lampa.Player.listener.remove('start',onPlayerStart);Lampa.Player.listener.remove('ready',onPlayerReady);Lampa.Player.listener.remove('destroy',onPlayerDestroy);}
    if(Lampa.PlayerVideo&&Lampa.PlayerVideo.listener){Lampa.PlayerVideo.listener.remove('canplay',onCanPlay);Lampa.PlayerVideo.listener.remove('timeupdate',onTimeUpdate);}
    filter.destroy();scroll.destroy();files.destroy();
   };

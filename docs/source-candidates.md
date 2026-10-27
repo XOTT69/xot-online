@@ -1,15 +1,23 @@
 # Candidates for native free Worker adapters
 
 Checked on 2026-10-26. Eneyida, KinoVezha and UASerials are now native adapters.
-Other entries remain research candidates, not enabled providers.
+UFDub was added in v0.3.11 after Cloudflare and Lampa playback checks. Other
+entries remain research candidates, not enabled providers.
 
 ## Additional candidates checked on 2026-10-27
 
-These checks use normal public catalog/player requests. Neither candidate is
-enabled in v0.3.10. Site access, a manifest and partial media access do not yet
-establish a finished Lampa adapter or compatibility with every TV.
+These checks use normal public catalog/player requests. Neither candidate was
+enabled in v0.3.10. The full v0.3.11 checks below supersede the initial partial
+media probes: UAFlix is deferred and UFDub is implemented. Playback on Chromium
+does not establish compatibility with every TV.
 
-### UAFlix — promising next catalog
+### UAFlix — deferred after full catalog access check
+
+The initial manifest/segment probes below were insufficient. A real catalog
+request from Cloudflare later returned only a YouTube trailer and an explicit
+message asking for authentication or a country change. The adapter prototype
+was not published. No SEO iframe fallback, region change, fingerprint script
+execution or authorization bypass is used to work around that message.
 
 - Current site: <https://uafix.net/>. The public movie page
   <https://uafix.net/films/protu-yragany/> publishes both a Zetvideo player and
@@ -25,12 +33,11 @@ establish a finished Lampa adapter or compatibility with every TV.
   HTTP 206, `video/mp2t`, CORS `*` and 1,024 bytes. No region change, authentication
   or challenge bypass is involved. This remains partial-media validation, not
   a complete Lampa playback test.
-- A native adapter still needs exact movie identity checks, current search and
-  episode parsing, voice preservation and actual Lampa playback validation.
+- A native adapter remains deferred until the catalog is normally accessible.
 - Primary adapter reference:
   <https://github.com/CakesTwix/cloudstream-extensions-uk/blob/master/UAFlixProvider/src/main/kotlin/com/lagradost/UAFlixProvider.kt>.
 
-### UFDub — separate public video infrastructure
+### UFDub — implemented, separate public video infrastructure
 
 - Current site: <https://ufdub.com/>. The inspected page
   <https://ufdub.com/anime/454-rokuhoudou-yotsuiro-biyori.html> publishes a
@@ -38,11 +45,26 @@ establish a finished Lampa adapter or compatibility with every TV.
 - Its public `ufdub.com/video/VIDEOS.php` episode endpoint redirects to a
   published MP4 on `api.ufdub.com`. From Cloudflare, a byte-range request to that
   media returns HTTP 206 and 1,024 bytes, with `application/octet-stream` and
-  no Access-Control-Allow-Origin header. Native MP4 playback and seeking in
-  Lampa still need to be tested; no quality tier is claimed from the filename.
-- The Location header may contain a non-ASCII filename. A future adapter must
-  handle the redirect encoding correctly and restrict it to the known media
-  host rather than forwarding arbitrary URLs.
+  no Access-Control-Allow-Origin header. Lampa's default `crossorigin=anonymous`
+  prevented playback. For owned UFDub MP4s only, the player uses normal HTML5
+  media embedding without that attribute. Video bytes are never proxied.
+- Real Lampa/Chromium playback passed for
+  <https://ufdub.com/film/426-nebesni-stvorinnia.html>: 1920×1080, 6,535.349 s,
+  including seeking to 60 s. The public guest playlist for project 454 has five
+  episodes; episodes 1 and 2 played at 1920×1080, 1,412.096 and 1,411.264 s.
+  Automatic next-episode selection preserves the voice; closing a pending
+  later episode prevents delayed playback. See `scripts/smoke-ufdub.mjs`.
+- One public MP4 is published per episode. Its quality is `Авто`; selectable
+  720p/1080p/2160p variants are not fabricated. `web` entries, trailers and
+  video requiring a separate audio file are excluded.
+- The Location header's UTF-8 filename is handled on Node and Workers, with
+  the redirect restricted to `https://api.ufdub.com/UFDUB_UPLOAD/VIDEO/*.mp4`.
+  Only the main guest `V2/VP.php` iframe is read. Alternate embed examples,
+  patron-only inventory, executable scripts and guessed episode URLs are not used.
+- Exact page title/year/type checks precede player resolution. Large series
+  use three requests when opened; later selected episodes use one redirect.
+  Lazy descriptors are separate from playable media URLs and share a delivery
+  family with the UFDub CDN for backup filtering.
 - Primary adapter reference:
   <https://github.com/CakesTwix/cloudstream-extensions-uk/blob/master/UFDubProvider/src/main/kotlin/com/lagradost/UFDubProvider.kt>.
 
