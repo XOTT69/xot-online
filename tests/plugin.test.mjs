@@ -32,7 +32,7 @@ function harness({card=movie,ready=true,stored={},early=false,expose=false}={}) 
  context.window=context;
  if(early)delete context.Lampa;
  function advance(ms){const end=now+ms;let count=0;while(true){const due=[...timers].filter(([,v])=>v.at<=end).sort((a,b)=>a[1].at-b[1].at)[0];if(!due)break;if(++count>1000)throw Error('timer loop');now=due[1].at;timers.delete(due[0]);due[1].fn();}now=end;}
- function boot(){const code=expose?plugin.replace(/\}\)\(\);\s*$/, 'window.__testMatching={matches:matches,names:names,get:get,voiceKey:voiceKey,ukrainian:ukrainian,chooseQuality:chooseQuality,episodeGroups:episodeGroups,backupGroups:backupGroups,deliveryFamily:deliveryFamily,streamItem:streamItem,sourcePreferences:sourcePreferences,sourceEnabled:sourceEnabled,orderedSources:orderedSources,preferredSource:preferredSource,displayGroups:displayGroups,cachedSearch:cachedSearch,favoriteIdentity:favoriteIdentity,favoriteVoices:favoriteVoices,favoriteVoice:favoriteVoice,watchCardKey:watchCardKey,watchHash:watchHash,watchProfile:watchProfile,watchHistory:watchHistory,rememberWatch:rememberWatch,watchProgress:watchProgress,watchTime:watchTime,latestUnfinished:latestUnfinished,clearSearchCache:function(){searchCache.clear();},cacheKeys:function(){return Array.from(searchCache.keys());}};})();'):plugin;runInNewContext(code,context);advance(350);}
+ function boot(){const code=expose?plugin.replace(/\}\)\(\);\s*$/, 'window.__testMatching={matches:matches,names:names,get:get,voiceKey:voiceKey,ukrainian:ukrainian,chooseQuality:chooseQuality,episodeGroups:episodeGroups,backupGroups:backupGroups,deliveryFamily:deliveryFamily,streamItem:streamItem,sourcePreferences:sourcePreferences,sourceEnabled:sourceEnabled,orderedSources:orderedSources,preferredSource:preferredSource,displayGroups:displayGroups,cachedSearch:cachedSearch,favoriteIdentity:favoriteIdentity,favoriteVoices:favoriteVoices,favoriteVoice:favoriteVoice,watchCardKey:watchCardKey,watchHash:watchHash,watchProfile:watchProfile,watchHistory:watchHistory,rememberWatch:rememberWatch,watchProgress:watchProgress,watchTime:watchTime,latestUnfinished:latestUnfinished,nextUnwatched:nextUnwatched,watchValues:watchValues,undoEligible:undoEligible,clearSearchCache:function(){searchCache.clear();},cacheKeys:function(){return Array.from(searchCache.keys());}};})();'):plugin;runInNewContext(code,context);advance(350);}
  function enter(){assert.ok(button,'movie button is mounted');button.handlers['hover:enter']();}
  return {context,Lampa,values,components,scripts,pushes,notices,menus,timers,listeners,boot,advance,enter,get button(){return button;}};
 }
@@ -207,4 +207,32 @@ test('Global favorite order outranks source order and never guesses another stud
  const items=[{provider:'eneyida',translation:'Studio A',language:'uk'},{provider:'uaserials',translation:'Studio B',language:'uk'},{provider:'eneyida',translation:'Studio B',language:'uk'},{provider:'filmix',translation:'Studio B',language:'ru'}];
  assert.equal(api.favoriteVoice(items,['eneyida','uaserials','filmix']).provider,'eneyida');assert.equal(api.favoriteVoice(items,['uaserials','eneyida','filmix']).provider,'uaserials');assert.equal(api.favoriteVoice([{provider:'filmix',translation:'Studio B',language:'ru'}],['filmix']),null);
  h.values.xot_favorite_voices=[{title:'Studio A',language:'uk'},{title:'Studio A',language:'uk'},{title:'',language:'uk'},null];assert.equal(api.favoriteVoices().length,1);
+});
+test('Next unwatched follows the most recently completed episode and never skips an unknown gap',()=>{
+ const h=harness({expose:true});h.boot();const {nextUnwatched,watchProgress}=h.context.__testMatching,card={id:99,name:'Series'};
+ const row=(season,episode,percent=0,updated=0)=>({item:{season,episode},progress:watchProgress({percent,updated})});
+ assert.equal(nextUnwatched([row(1,1),row(1,2)],card),null);
+ assert.equal(nextUnwatched([row(1,1,100,100),row(1,2)],movie),null);
+ assert.equal(nextUnwatched([row(1,1,100,100),row(1,2)],card).item.episode,2);
+ assert.equal(nextUnwatched([row(1,1,100,100),row(1,3)],card),null);
+ assert.equal(nextUnwatched([row(1,1,100,100),row(1,2,100,10),row(1,3)],card).item.episode,3);
+ const target=nextUnwatched([row(1,1,100,100),row(1,2),row(2,1,100,10),row(2,2)],card);assert.equal(target.item.season,1);assert.equal(target.item.episode,2);assert.equal(target.progress.time,0);
+});
+test('Season boundaries require known episode totals for a direct next-episode action',()=>{
+ const h=harness({expose:true});h.boot();const {nextUnwatched,watchProgress}=h.context.__testMatching;
+ const entries=[{item:{season:1,episode:8},progress:watchProgress({percent:100,updated:100}),record:{translation:'Studio'}},{item:{season:2,episode:1},progress:watchProgress({})}],card={id:99,name:'Series'};
+ assert.equal(nextUnwatched(entries,card).mode,'season');
+ const next=nextUnwatched(entries,{...card,seasons:[{season_number:1,episode_count:8}]});assert.equal(next.mode,'episode');assert.equal(next.record.translation,'Studio');assert.equal(next.progress.time,0);
+ assert.equal(nextUnwatched(entries,{...card,seasons:[{season_number:1,episode_count:10}]}),null);
+ entries[1].item.episode=2;assert.equal(nextUnwatched(entries,card),null);entries[1].item.episode=1;entries[1].item.season=3;assert.equal(nextUnwatched(entries,card),null);
+});
+test('Undo restores raw values only while the edited mark has not changed',()=>{
+ const h=harness({expose:true});h.boot();const {watchValues,undoEligible}=h.context.__testMatching;
+ const mark={percent:0,time:40,duration:100,updated:50},before=watchValues(mark);assert.equal(before.percent,0,'Do not save the derived UI percentage in the undo snapshot');
+ const after={percent:100,time:100,duration:100},entry={before,after,updated:100,applied:true};
+ assert.equal(undoEligible({...after,updated:100},entry),true);
+ assert.equal(undoEligible({...after,updated:101},entry),false,'Newer playback with identical values is protected');
+ assert.equal(undoEligible({...after,time:99,updated:100},entry),false);
+ assert.equal(undoEligible({...after,updated:100},{...entry,applied:false}),false);
+ assert.equal(watchValues({percent:Infinity,time:-5,duration:NaN}).time,0);
 });

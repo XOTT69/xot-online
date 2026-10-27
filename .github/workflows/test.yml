@@ -42,6 +42,7 @@ jobs:
           node --check scripts/smoke-serialno.mjs
           node --check scripts/smoke-watch.mjs
           node --check scripts/smoke-favorite-voices.mjs
+          node --check scripts/smoke-watch-controls.mjs
           npm test
       - name: Build Worker and static asset routing
         run: npx wrangler deploy --config wrangler.toml --dry-run --outdir /tmp/xot-worker
