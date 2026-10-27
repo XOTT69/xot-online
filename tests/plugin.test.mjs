@@ -105,9 +105,9 @@ test('Episode queues sort seasons and original episode numbers without mixing so
 test('Backup candidates preserve exact episode, reject failed delivery families and collapse shared URLs',()=>{
  const h=harness({expose:true});h.boot();const {backupGroups,deliveryFamily}=h.context.__testMatching;
  assert.equal(deliveryFamily('https://cdn.hdvbua.pro/a.m3u8'),deliveryFamily('https://tortuga.tw/a.m3u8'));
- const row=(provider,season,episode,url='https://ashdi.vip/one.m3u8')=>({provider,season,episode,url,voice_id:'uk'});
- const rows=[row('uakino',2,3),row('catalog',2,3),row('uakino',1,3),row('uakino',2,4),row('kinovezha',2,3,'https://hdvbua.pro/a.m3u8'),row('bad',2,3,'javascript:alert(1)')];
- const groups=backupGroups(rows,{season:2,episode:3},new Set(['hdvbua']));assert.equal(groups.length,1);assert.equal(groups[0][0].provider,'uakino');
- assert.equal(backupGroups(rows,{season:2,episode:3},new Set(['hdvbua','ashdi'])).length,0);
+ const row=(provider,season,episode,url='https://cdn.example/one.m3u8')=>({provider,season,episode,url,voice_id:'uk'});
+ const rows=[row('catalog_a',2,3),row('catalog',2,3),row('catalog_a',1,3),row('catalog_a',2,4),row('kinovezha',2,3,'https://hdvbua.pro/a.m3u8'),row('bad',2,3,'javascript:alert(1)')];
+ const groups=backupGroups(rows,{season:2,episode:3},new Set(['hdvbua']));assert.equal(groups.length,1);assert.equal(groups[0][0].provider,'catalog_a');
+ assert.equal(backupGroups(rows,{season:2,episode:3},new Set(['hdvbua','cdn.example'])).length,0);
  assert.equal(backupGroups(rows,{},new Set()).length,0,'A movie must not fall back to a series');
 });

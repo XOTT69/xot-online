@@ -1,7 +1,7 @@
 (function () {
 'use strict';
 if (!window.Lampa || window.__XOT_ONLINE_INITIALIZED__) return;
-var VERSION='0.3.7', DEFAULT_API='https://xot-online.ai-beta69690.workers.dev';
+var VERSION='0.3.8', DEFAULT_API='https://xot-online.ai-beta69690.workers.dev';
 var API_BASE=window.__XOT_API_BASE__ || (function () {
  var scripts=document.getElementsByTagName('script');
  for(var i=scripts.length-1;i>=0;i--){
@@ -12,7 +12,7 @@ var API_BASE=window.__XOT_API_BASE__ || (function () {
  }
  return DEFAULT_API;
 })();
-var BASE_SOURCES=[{id:'all',title:'Усі джерела',kind:'aggregate'},{id:'filmix',title:'Filmix',kind:'native'},{id:'eneyida',title:'Eneyida',kind:'native'},{id:'kinovezha',title:'KinoVezha',kind:'native'},{id:'uaserials',title:'UASerials',kind:'native'},{id:'uakino',title:'UAKino',kind:'native'},{id:'rezka',title:'HDRezka',kind:'native'},{id:'anilibria',title:'AniLibria · аніме',kind:'native'}];
+var BASE_SOURCES=[{id:'all',title:'Усі джерела',kind:'aggregate'},{id:'filmix',title:'Filmix',kind:'native'},{id:'eneyida',title:'Eneyida',kind:'native'},{id:'kinovezha',title:'KinoVezha',kind:'native'},{id:'uaserials',title:'UASerials',kind:'native'},{id:'rezka',title:'HDRezka',kind:'native'},{id:'anilibria',title:'AniLibria · аніме',kind:'native'}];
 var lastCard=null,buttonTimers=[],screenCounter=0;
 function notify(message){if(Lampa.Noty)Lampa.Noty.show(message);}
 function get(key,fallback){try{
@@ -44,7 +44,7 @@ function matches(item,card){
  var expected=names(card).map(normalized);
  return [item.title,item.original_title].filter(Boolean).map(normalized).some(function(value){return expected.indexOf(value)>=0;});
 }
-function publicPlayerSource(id){return ['eneyida','kinovezha','uaserials','uakino'].indexOf(id)>=0;}
+function publicPlayerSource(id){return ['eneyida','kinovezha','uaserials'].indexOf(id)>=0;}
 function voiceKey(item){return item.voice_id||item.translation||'Оригінал';}
 function ukrainian(item){
  var language=String(item.language||item.lang||item.audio_language||'').toLowerCase();
@@ -64,7 +64,7 @@ function episodeGroups(items,current){
  return Array.from(groups.values()).sort(function(a,b){return a[0].season-b[0].season||a[0].episode-b[0].episode;});
 }
 function deliveryFamily(value){
- try{var host=new URL(value).hostname;if(/(?:^|\.)(?:hdvbua\.pro|tortuga\.(?:tw|wtf))$/.test(host))return 'hdvbua';if(/(?:^|\.)ashdi\.vip$/.test(host))return 'ashdi';return host;}catch(e){return '';}
+ try{var host=new URL(value).hostname;if(/(?:^|\.)(?:hdvbua\.pro|tortuga\.(?:tw|wtf))$/.test(host))return 'hdvbua';return host;}catch(e){return '';}
 }
 function backupGroups(items,current,blocked){
  var groups=new Map(),seen=new Set();
@@ -82,14 +82,14 @@ function identity(){
 }
 function preferredSource(card){
  var saved=get('xot_native_last_sources',{}),id=saved[card.id]||get('xot_native_source','filmix');
+ if(id==='uakino')return 'filmix';
  return /^[a-z][a-z0-9_]{1,40}$/.test(id)?id:'filmix';
 }
 function readableError(error){
  var code=error&&error.message||String(error||'');
- if(code==='uakino_region_restricted')return 'Плеєр UAKino (Ashdi) обмежив доступ із регіону Cloudflare Worker. Вибери інший балансер.';
  var eneyidaErrors={eneyida_movie_mismatch:'Сторінка Eneyida не відповідає вибраному фільму. Уточни назву через пошук угорі.',eneyida_access_denied:'Eneyida обмежила доступ. Спробуй інший балансер.',eneyida_timeout:'Eneyida не відповіла вчасно.',eneyida_player_not_found:'На сторінці Eneyida не знайдено доступного плеєра.',eneyida_player_format:'Eneyida змінила формат плеєра.',eneyida_invalid_playlist:'Eneyida не повернула придатного відеоплейліста.',eneyida_stream_unavailable:'Для цього фільму або серії Eneyida не повернула відео.',eneyida_unsupported_stream:'Цей формат відео Eneyida поки не підтримується.',eneyida_unavailable:'Eneyida зараз недоступна. Повтори запит або вибери інший балансер.'};
- var publicError=code.match(/^(kinovezha|uaserials|uakino)_(.+)$/);
- if(publicError){var name={kinovezha:'KinoVezha',uaserials:'UASerials',uakino:'UAKino'}[publicError[1]];return (eneyidaErrors['eneyida_'+publicError[2]]||'Eneyida не відповіла коректно. Повтори запит або вибери інший балансер.').replace(/Eneyida/g,name);}
+ var publicError=code.match(/^(kinovezha|uaserials)_(.+)$/);
+ if(publicError){var name={kinovezha:'KinoVezha',uaserials:'UASerials'}[publicError[1]];return (eneyidaErrors['eneyida_'+publicError[2]]||'Eneyida не відповіла коректно. Повтори запит або вибери інший балансер.').replace(/Eneyida/g,name);}
  if(eneyidaErrors[code])return eneyidaErrors[code];
  var errors={anilibria_unavailable:'AniLibria зараз недоступна. Спробуй інший балансер.',anilibria_timeout:'AniLibria не відповіла вчасно.',anilibria_restricted:'AniLibria обмежила доступ до цього релізу.',anilibria_invalid_response:'AniLibria змінила формат відповіді.',filmix_unavailable:'Filmix зараз недоступний. Перемкни балансер або повтори пошук.',filmix_timeout:'Filmix не відповів вчасно.',filmix_http_403:'Filmix обмежив доступ.',filmix_http_401:'Filmix відхилив авторизацію. Від’єднай пристрій або перевір акаунт.',filmix_invalid_json:'Filmix повернув невідомий формат відповіді.',rezka_access_denied:'HDRezka повернула 403 або обмеження доступу. Спробуй інший балансер.',rezka_mirror_redirect:'Адреса HDRezka змінилася. Потрібно оновити адресу джерела на сервері.',rezka_player_not_found:'На сторінці HDRezka не знайдено доступного плеєра.',rezka_stream_unavailable:'Це відео або озвучення HDRezka зараз недоступне.',rezka_timeout:'HDRezka не відповіла вчасно.',rezka_unavailable:'Не вдалося з’єднатися з HDRezka.',rezka_unsupported_stream_format:'HDRezka змінила формат відповіді плеєра.',request_timeout:'Сервер не відповів вчасно. Повтори запит.',invalid_response:'Сервер повернув некоректну відповідь.'};
  return errors[code]||'Джерело не відповіло коректно ('+code.slice(0,70)+').';

@@ -1,6 +1,6 @@
 {
   "name": "xot-online",
-  "version": "0.3.7",
+  "version": "0.3.8",
   "private": true,
   "type": "module",
   "scripts": {
@@ -17,7 +17,6 @@
     "smoke:uaserials": "node scripts/smoke-public-players.mjs uaserials",
     "smoke:features": "node scripts/smoke-features.mjs",
     "server:start": "node server/index.mjs",
-    "smoke:uakino": "node scripts/smoke-public-players.mjs uakino",
     "smoke:backup": "node scripts/smoke-backup.mjs"
   },
   "devDependencies": {

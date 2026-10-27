@@ -83,7 +83,13 @@ the selected episode's video manifest was resolved. See `scripts/smoke-public-pl
 - The browser test also verifies the separate header voice control for series and
   that only the selected episode's video manifest is requested.
 
-## UAKino audit (v0.3.6, rechecked in v0.3.7)
+## Archived UAKino audit (v0.3.6–0.3.7; removed in v0.3.8)
+
+UAKino/Ashdi was removed at the user's request in v0.3.8. It is absent from the
+balancer picker, aggregate and backup searches, API registry and native Worker
+routes. The implementation and its provider-specific tests were removed; Git
+history retains the earlier work. The observations below describe that earlier
+audit, not an available current adapter.
 
 The current public catalog is <https://uakino.eu/>, rather than the older
 `uakino.best` / `uakino.top` addresses. Its public search and exact movie identity
@@ -127,8 +133,7 @@ selection retains the regional restriction message. No hosting change was made.
    voices/episodes, and direct HLS playback; verified on a Cloudflare Worker.
 2. KinoVezha: implemented and verified film/series playback from Cloudflare.
 3. UASerials: implemented current tab decoding and verified film/series playback.
-4. UAKino: adapter implemented; Ashdi currently region-restricts the Worker.
-5. Revisit UAFilm only if ordinary public access works.
+4. Revisit UAFilm only if ordinary public access works.
 
 For every provider, show only qualities actually advertised by its media
 playlist. These checks do not establish free 2160p availability.

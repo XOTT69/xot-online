@@ -16,7 +16,6 @@ async function getKodikToken(env){
 const STREAM_EXT=/\.(m3u8|mp4|mpd)(?:[?#]|$)/i;
 function validMedia(url){try{const u=new URL(url);return u.protocol==='https:'&&STREAM_EXT.test(u.pathname);}catch(e){return false;}}
 const UA_SOURCES=[
- {id:'uakino',name:'UAKino',env:'XOT_UAKINO_API_URL'},
  {id:'uaserials',name:'UASerials',env:'XOT_UASERIALS_API_URL'},
  {id:'uafilm',name:'UAFILM',env:'XOT_UAFILM_API_URL'},
  {id:'filmix_api',name:'Filmix API',env:'XOT_FILMIX_API_URL'},
