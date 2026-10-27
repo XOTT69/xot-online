@@ -32,7 +32,7 @@ function harness({card=movie,ready=true,stored={},early=false,expose=false}={}) 
  context.window=context;
  if(early)delete context.Lampa;
  function advance(ms){const end=now+ms;let count=0;while(true){const due=[...timers].filter(([,v])=>v.at<=end).sort((a,b)=>a[1].at-b[1].at)[0];if(!due)break;if(++count>1000)throw Error('timer loop');now=due[1].at;timers.delete(due[0]);due[1].fn();}now=end;}
- function boot(){const code=expose?plugin.replace(/\}\)\(\);\s*$/, 'window.__testMatching={matches:matches,names:names,get:get,voiceKey:voiceKey,ukrainian:ukrainian,chooseQuality:chooseQuality,episodeGroups:episodeGroups,backupGroups:backupGroups,deliveryFamily:deliveryFamily,streamItem:streamItem,sourcePreferences:sourcePreferences,sourceEnabled:sourceEnabled,orderedSources:orderedSources,preferredSource:preferredSource,displayGroups:displayGroups,cachedSearch:cachedSearch,clearSearchCache:function(){searchCache.clear();},cacheKeys:function(){return Array.from(searchCache.keys());}};})();'):plugin;runInNewContext(code,context);advance(350);}
+ function boot(){const code=expose?plugin.replace(/\}\)\(\);\s*$/, 'window.__testMatching={matches:matches,names:names,get:get,voiceKey:voiceKey,ukrainian:ukrainian,chooseQuality:chooseQuality,episodeGroups:episodeGroups,backupGroups:backupGroups,deliveryFamily:deliveryFamily,streamItem:streamItem,sourcePreferences:sourcePreferences,sourceEnabled:sourceEnabled,orderedSources:orderedSources,preferredSource:preferredSource,displayGroups:displayGroups,cachedSearch:cachedSearch,favoriteIdentity:favoriteIdentity,favoriteVoices:favoriteVoices,favoriteVoice:favoriteVoice,watchCardKey:watchCardKey,watchHash:watchHash,watchProfile:watchProfile,watchHistory:watchHistory,rememberWatch:rememberWatch,watchProgress:watchProgress,watchTime:watchTime,latestUnfinished:latestUnfinished,clearSearchCache:function(){searchCache.clear();},cacheKeys:function(){return Array.from(searchCache.keys());}};})();'):plugin;runInNewContext(code,context);advance(350);}
  function enter(){assert.ok(button,'movie button is mounted');button.handlers['hover:enter']();}
  return {context,Lampa,values,components,scripts,pushes,notices,menus,timers,listeners,boot,advance,enter,get button(){return button;}};
 }
@@ -164,4 +164,47 @@ test('Authenticated Filmix searches bypass guest cache and never put tokens in c
  h.context.fetch=async()=>{calls++;return {ok:true,json:async()=>({results:[{id:1,title:'Movie'}]})};};
  const payload={title:'Movie'};await api.cachedSearch('filmix',payload);await api.cachedSearch('filmix',payload);assert.equal(calls,1);
  h.values.xot_filmix_device_token='private-filmix-token';await api.cachedSearch('filmix',payload);await api.cachedSearch('filmix',payload);assert.equal(calls,3);assert.ok(!api.cacheKeys().some(k=>k.includes('private-filmix-token')));
+});
+test('Watch hashes preserve old XOT progress and distinguish movie, series and episodes',()=>{
+ const h=harness({expose:true});h.Lampa.Utils={hash:value=>value};h.boot();const api=h.context.__testMatching;
+ assert.equal(api.watchHash(movie,{}),'xot:movie:460458:0:0');
+ const series={id:460458,name:'Show',original_name:'Show',source:'tmdb'};
+ assert.equal(api.watchHash(series,{season:2,episode:3}),'xot:tv:460458:2:3');assert.notEqual(api.watchHash(series,{season:1,episode:3}),api.watchHash(series,{season:2,episode:3}));
+ assert.notEqual(api.watchCardKey(movie),api.watchCardKey(series));assert.notEqual(api.watchCardKey(movie),api.watchCardKey({...movie,source:'other'}));
+});
+test('Progress is bounded, completion follows Lampa’s 90 percent threshold and unknown positions are not invented',()=>{
+ const h=harness({expose:true});h.boot();const {watchProgress,watchTime}=h.context.__testMatching;
+ assert.equal(watchProgress({time:43,duration:100,percent:0}).percent,43);assert.equal(watchProgress({time:43,duration:100}).unfinished,true);
+ assert.equal(watchProgress({percent:89,time:89,duration:100}).watched,false);assert.equal(watchProgress({percent:90,time:90,duration:100}).watched,true);assert.equal(watchProgress({percent:90,time:90,duration:100}).unfinished,false);
+ const bad=watchProgress({percent:Infinity,time:-3,duration:NaN,updated:Infinity});assert.deepEqual(JSON.parse(JSON.stringify(bad)),{time:0,duration:0,percent:0,watched:false,unfinished:false,updated:0});
+ assert.equal(watchProgress({percent:300,time:200,duration:100}).time,100);assert.equal(watchProgress({percent:300}).percent,100);assert.equal(watchProgress({percent:25}).unfinished,false);
+ assert.equal(watchProgress({time:60}).unfinished,true);assert.equal(watchTime(3605),'1:00:05');assert.equal(watchTime(Infinity),'0:00');
+});
+test('Continue chooses the latest unfinished episode across seasons, even when that episode is missing from current results',()=>{
+ const h=harness({expose:true});h.boot();const {latestUnfinished,watchProgress}=h.context.__testMatching;
+ const row=(season,episode,updated,percent=30,record=null)=>({item:{season,episode},progress:watchProgress({time:percent,duration:100,percent,updated}),record});
+ const recent=row(2,2,500),completed=row(2,3,900,100),old=row(1,2,100),missing=row(3,8,700,20,{updated:800});
+ assert.equal(latestUnfinished([recent,completed,old]).item.episode,2);assert.equal(latestUnfinished([recent,completed,old]).item.season,2);
+ assert.equal(latestUnfinished([recent,missing]).item.season,3);assert.equal(latestUnfinished([completed]),null);
+ assert.equal(latestUnfinished([row(1,1,0),row(2,1,0)]).item.season,2);
+});
+test('Watch history is profile-scoped, stores only metadata and keeps the latest source/voice for each episode',()=>{
+ const h=harness({expose:true});let profile='file_view_11';h.Lampa.Timeline={filename:()=>profile};h.boot();const api=h.context.__testMatching;
+ const item={provider:'eneyida',translation:'Studio',voice_id:'one',url:'https://cdn.example/signed-secret.m3u8',device_token:'private-token'};
+ api.rememberWatch(movie,item);assert.equal(api.watchHistory().length,1);assert.equal(api.watchHistory()[0].voice_id,'one');
+ h.advance(1000);api.rememberWatch(movie,{...item,provider:'uaserials',voice_id:'two'});assert.equal(api.watchHistory().length,1);assert.equal(api.watchHistory()[0].provider,'uaserials');
+ const stored=JSON.stringify(h.values.xot_watch_history_file_view_11);assert.ok(!/signed-secret|private-token|https:|device_token/.test(stored));
+ profile='file_view_22';assert.equal(api.watchHistory().length,0);api.rememberWatch(movie,item);profile='file_view_11';assert.equal(api.watchHistory()[0].voice_id,'two');
+ h.values.xot_watch_history_file_view_11=[{card:api.watchCardKey(movie),season:0,episode:0,updated:2,translation:{bad:true},url:'secret'}];const clean=api.watchHistory()[0];assert.equal(clean.translation,'');assert.equal(clean.url,undefined);
+});
+test('Favorite voices ignore quality labels but retain language and exact studio identity',()=>{
+ const h=harness({expose:true});h.boot();const {favoriteIdentity}=h.context.__testMatching;
+ assert.equal(favoriteIdentity({translation:'Студія [Українська | 1080p+]'}),favoriteIdentity({translation:'Студія [Українська | 720p]'}));
+ assert.notEqual(favoriteIdentity({translation:'Studio',language:'uk'}),favoriteIdentity({translation:'Studio',language:'ru'}));assert.notEqual(favoriteIdentity({translation:'Studio'}),favoriteIdentity({translation:'Studio 2'}));assert.notEqual(favoriteIdentity({translation:'Studio'}),favoriteIdentity({translation:'Studio',language:'uk'}));
+});
+test('Global favorite order outranks source order and never guesses another studio or language',()=>{
+ const h=harness({expose:true,stored:{xot_favorite_voices:[{title:'Studio B',language:'uk'},{title:'Studio A',language:'uk'}]}});h.boot();const api=h.context.__testMatching;
+ const items=[{provider:'eneyida',translation:'Studio A',language:'uk'},{provider:'uaserials',translation:'Studio B',language:'uk'},{provider:'eneyida',translation:'Studio B',language:'uk'},{provider:'filmix',translation:'Studio B',language:'ru'}];
+ assert.equal(api.favoriteVoice(items,['eneyida','uaserials','filmix']).provider,'eneyida');assert.equal(api.favoriteVoice(items,['uaserials','eneyida','filmix']).provider,'uaserials');assert.equal(api.favoriteVoice([{provider:'filmix',translation:'Studio B',language:'ru'}],['filmix']),null);
+ h.values.xot_favorite_voices=[{title:'Studio A',language:'uk'},{title:'Studio A',language:'uk'},{title:'',language:'uk'},null];assert.equal(api.favoriteVoices().length,1);
 });

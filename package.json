@@ -1,6 +1,6 @@
 {
   "name": "xot-online",
-  "version": "0.3.12",
+  "version": "0.3.13",
   "private": true,
   "type": "module",
   "scripts": {
@@ -20,7 +20,9 @@
     "smoke:backup": "node scripts/smoke-backup.mjs",
     "smoke:ufdub": "node scripts/smoke-ufdub.mjs",
     "smoke:sources": "node scripts/smoke-source-controls.mjs",
-    "smoke:serialno": "node scripts/smoke-serialno.mjs"
+    "smoke:serialno": "node scripts/smoke-serialno.mjs",
+    "smoke:watch": "node scripts/smoke-watch.mjs",
+    "smoke:favorite-voices": "node scripts/smoke-favorite-voices.mjs"
   },
   "devDependencies": {
     "playwright-core": "^1.61.1",
