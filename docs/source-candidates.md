@@ -83,12 +83,30 @@ the selected episode's video manifest was resolved. See `scripts/smoke-public-pl
 - The browser test also verifies the separate header voice control for series and
   that only the selected episode's video manifest is requested.
 
+## UAKino audit (v0.3.6)
+
+The current public catalog is <https://uakino.eu/>, rather than the older
+`uakino.best` / `uakino.top` addresses. Its public search and exact movie identity
+work from the Worker. The new native adapter reads only the Ashdi tab; trailers
+and the access-protected UACDN tab are excluded.
+
+The site's own public series implementation is
+<https://uakino.eu/templates/uakino/ilyaugly/ashdi-smart/smart-player.js?v=3.4.4>.
+It posts to `/index.php?controller=ajax&mod=smart_playlist`. The returned published
+Ashdi serial page contains multiple voices and seasons without requesting all
+individual media playlists. Local public inspection of Tulsa King yielded 62
+entries across DniproFilm, Kyivstar and Uaflix. The movie master advertised actual
+480p/720p/1080p variants.
+
+**Cloudflare verification failed for playback:** Ashdi returns HTTP 200 containing
+“Змініть країну перегляду” / “Плеєр недоступний для перегляду в цій країні”.
+This is `uakino_region_restricted`, not a parser failure or a successful empty
+search. No alternate IP, relay, protected player or region bypass is attempted.
+Lampa shows the restriction; aggregate and backup results contain no fake streams.
+This source is implemented but is **not a verified working Worker balancer**.
+
 ## Deferred candidates
 
-- **UAKino:** current reference implementations name `uakino.best` and
-  `uakino.top`. Direct curl checks returned HTTP 404 and 403 respectively.
-  Open adapter source exists, but current runtime access is unconfirmed:
-  <https://github.com/lampame/lampac-ukraine/blob/main/LME.UAKino/UAKinoInvoke.cs>.
 - **UAFilm:** requests to the public JSON search route at
   `https://uafilm.me/api/v1/search/{query}` redirected to `/cdn-cgi/content`.
   No challenge bypass was attempted. Do not enable based on route documentation.
@@ -102,7 +120,8 @@ the selected episode's video manifest was resolved. See `scripts/smoke-public-pl
    voices/episodes, and direct HLS playback; verified on a Cloudflare Worker.
 2. KinoVezha: implemented and verified film/series playback from Cloudflare.
 3. UASerials: implemented current tab decoding and verified film/series playback.
-4. Revisit UAKino/UAFilm only if ordinary public access works.
+4. UAKino: adapter implemented; Ashdi currently region-restricts the Worker.
+5. Revisit UAFilm only if ordinary public access works.
 
 For every provider, show only qualities actually advertised by its media
 playlist. These checks do not establish free 2160p availability.

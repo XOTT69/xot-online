@@ -3,6 +3,7 @@ import {handleRezka} from './rezka.js';
 import {handleAnilibria} from './anilibria.js';
 import {handleEneyida} from './eneyida.js';
 import {handleUkrainian} from './ukrainian.js';
+import {handleUakino} from './uakino.js';
 import {forwardNative} from './backend.js';
 import {providers,normalize} from './providers.js';
 import {buildQueries,matchScore} from './matching.js';
@@ -28,6 +29,7 @@ export default {async fetch(request,env){
  if(url.pathname==='/api/eneyida')return handleEneyida(request);
  if(url.pathname==='/api/kinovezha')return handleUkrainian(request,'kinovezha');
  if(url.pathname==='/api/uaserials')return handleUkrainian(request,'uaserials');
+ if(url.pathname==='/api/uakino')return handleUakino(request);
  if(request.method==='OPTIONS')return new Response(null,{status:204,headers:{...headers,'access-control-allow-methods':'GET, OPTIONS'}});
  if(url.pathname==='/m.js'||url.pathname==='/online.js'){
   if(!['GET','HEAD'].includes(request.method))return json({error:'method_not_allowed'},405);
@@ -41,7 +43,7 @@ export default {async fetch(request,env){
   return response;
  }
  if(request.method!=='GET')return json({error:'method_not_allowed'},405);
- if(url.pathname==='/api/health')return json({ok:true,service:'xot-online',provider_count:providers.filter(p=>!p.enabled||p.enabled(env)).length,native_balancers:['filmix','eneyida','kinovezha','uaserials','rezka','anilibria'],features:{filmix_device_flow:true,native_balancers:true}});
+ if(url.pathname==='/api/health')return json({ok:true,service:'xot-online',provider_count:providers.filter(p=>!p.enabled||p.enabled(env)).length,native_balancers:['filmix','eneyida','kinovezha','uaserials','uakino','rezka','anilibria'],features:{filmix_device_flow:true,native_balancers:true}});
  if(url.pathname==='/api/providers')return json({providers:providers.map(p=>({id:p.id,name:p.name,enabled:!p.enabled||p.enabled(env)}))});
  if(url.pathname==='/api/query-plan'||url.pathname==='/api/search'){
   const query=getQuery(url);if(!check(query))return json({error:'invalid_query'},400);

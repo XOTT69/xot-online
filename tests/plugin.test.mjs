@@ -32,7 +32,7 @@ function harness({card=movie,ready=true,stored={},early=false,expose=false}={}) 
  context.window=context;
  if(early)delete context.Lampa;
  function advance(ms){const end=now+ms;let count=0;while(true){const due=[...timers].filter(([,v])=>v.at<=end).sort((a,b)=>a[1].at-b[1].at)[0];if(!due)break;if(++count>1000)throw Error('timer loop');now=due[1].at;timers.delete(due[0]);due[1].fn();}now=end;}
- function boot(){const code=expose?plugin.replace(/\}\)\(\);\s*$/, 'window.__testMatching={matches:matches,names:names,get:get,voiceKey:voiceKey,ukrainian:ukrainian,chooseQuality:chooseQuality,episodeGroups:episodeGroups};})();'):plugin;runInNewContext(code,context);advance(350);}
+ function boot(){const code=expose?plugin.replace(/\}\)\(\);\s*$/, 'window.__testMatching={matches:matches,names:names,get:get,voiceKey:voiceKey,ukrainian:ukrainian,chooseQuality:chooseQuality,episodeGroups:episodeGroups,backupGroups:backupGroups,deliveryFamily:deliveryFamily};})();'):plugin;runInNewContext(code,context);advance(350);}
  function enter(){assert.ok(button,'movie button is mounted');button.handlers['hover:enter']();}
  return {context,Lampa,values,components,scripts,pushes,notices,menus,timers,listeners,boot,advance,enter,get button(){return button;}};
 }
@@ -99,4 +99,15 @@ test('Episode queues sort seasons and original episode numbers without mixing so
  const row=(season,episode,provider='eneyida',voice_id='ua')=>({season,episode,provider,voice_id});
  const items=[row(2,1),row(1,10),row(1,1),row(1,1),row(2,2,'filmix'),row(2,2,'eneyida','ru'),row(0,0)];
  const groups=episodeGroups(items,row(1,1));assert.equal(groups.length,3);assert.deepEqual(JSON.parse(JSON.stringify(groups.map(x=>[x[0].season,x[0].episode]))),[[1,1],[1,10],[2,1]]);assert.equal(groups[0].length,2);
+});
+
+
+test('Backup candidates preserve exact episode, reject failed delivery families and collapse shared URLs',()=>{
+ const h=harness({expose:true});h.boot();const {backupGroups,deliveryFamily}=h.context.__testMatching;
+ assert.equal(deliveryFamily('https://cdn.hdvbua.pro/a.m3u8'),deliveryFamily('https://tortuga.tw/a.m3u8'));
+ const row=(provider,season,episode,url='https://ashdi.vip/one.m3u8')=>({provider,season,episode,url,voice_id:'uk'});
+ const rows=[row('uakino',2,3),row('catalog',2,3),row('uakino',1,3),row('uakino',2,4),row('kinovezha',2,3,'https://hdvbua.pro/a.m3u8'),row('bad',2,3,'javascript:alert(1)')];
+ const groups=backupGroups(rows,{season:2,episode:3},new Set(['hdvbua']));assert.equal(groups.length,1);assert.equal(groups[0][0].provider,'uakino');
+ assert.equal(backupGroups(rows,{season:2,episode:3},new Set(['hdvbua','ashdi'])).length,0);
+ assert.equal(backupGroups(rows,{},new Set()).length,0,'A movie must not fall back to a series');
 });

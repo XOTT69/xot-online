@@ -28,11 +28,14 @@ jobs:
           node --check worker/anilibria.js
           node --check worker/eneyida.js
           node --check worker/ukrainian.js
+          node --check worker/uakino.js
           node --check worker/backend.js
           node --check worker/index.js
           node --check server/index.mjs
           node --check scripts/smoke-assets.mjs
           node --check scripts/smoke-features.mjs
+          node --check scripts/smoke-backup.mjs
+          node --check scripts/smoke-public-players.mjs
           npm test
       - name: Build Worker and static asset routing
         run: npx wrangler deploy --config wrangler.toml --dry-run --outdir /tmp/xot-worker

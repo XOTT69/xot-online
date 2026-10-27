@@ -11,9 +11,10 @@ const first=(node,predicate)=>all(node,predicate)[0];
 const cls=(node,name)=>(node.attribs?.class||'').split(/\s+/).includes(name);
 const text=node=>node?clean(DomUtils.textContent(node)):'';
 function pagePath(value){if(typeof value!=='string'||!/^\/\d{1,8}-[a-z0-9-]+\.html$/i.test(value)||value.length>500)throw Error('invalid_path');return value;}
-async function siteFetch(site,path,form){
+export async function siteFetch(site,path,form,options={}){
  const url=new URL(path,site.origin);if(url.origin!==site.origin)throw Error('invalid_path');
- const headers={accept:'text/html','user-agent':'Mozilla/5.0',referer:site.origin+'/'};
+ const headers={accept:options.ajax?'application/json':'text/html','user-agent':'Mozilla/5.0',referer:options.referer||site.origin+'/'};
+ if(options.ajax){headers['x-requested-with']='XMLHttpRequest';headers.origin=site.origin;}
  if(form)headers['content-type']='application/x-www-form-urlencoded';
  const response=await fetch(url,{method:form?'POST':'GET',headers,body:form?new URLSearchParams(form).toString():undefined,redirect:'manual',signal:AbortSignal.timeout(8000)});
  if([403,429].includes(response.status))throw Error('access_denied');

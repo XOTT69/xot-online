@@ -128,7 +128,7 @@ function decodePublicFile(value){
  }catch{}
  throw Error('eneyida_player_format');
 }
-export function playerInventory(file,post){
+export function playerInventory(file,post,validate=trustedURL){
  const value=decodePublicFile(file);let data=value;
  if(value.startsWith('[')){try{data=JSON.parse(value);}catch{throw Error('eneyida_player_format');}}
  const items=[],seen=new Set();let nodes=0;
@@ -151,17 +151,17 @@ export function playerInventory(file,post){
   // metadata. Keep every voice but pass only the actual HLS URL to the player.
   for(const track of node.file.split(/;\s*(?=\{)/)){
    const labelled=track.match(/^\{([^}]{1,200})\}/),raw=track.slice(labelled?labelled[0].length:0).split('(subtitle:')[0].trim();
-   let url;try{url=trustedURL(raw).toString();}catch{continue;}
+   let url;try{url=validate(raw).toString();}catch{continue;}
    const translation=clean(labelled?.[1])||next.translation||post.translation||'Українська';
    const key=[url,s,e,translation].join('|');if(seen.has(key))continue;seen.add(key);
-   items.push({title:post.title,source:post.source||'Eneyida',provider:post.provider||'eneyida',translation,voice_id:(post.provider||'eneyida')+':'+translation,season:s,episode:e,url,quality:'Авто',needs_resolve:true});
+   items.push({title:post.title,source:post.source||'Eneyida',provider:post.provider||'eneyida',translation,voice_id:(post.provider||'eneyida')+':'+translation,season:s,episode:e,url,quality:'Авто',needs_resolve:true,...(post.language?{language:post.language}:{})});
   }
  }
  walk(data);
  return items;
 }
 
-export function hlsQualities(body,base){
+export function hlsQualities(body,base,validate=trustedURL){
  if(!body.trimStart().startsWith('#EXTM3U'))throw Error('eneyida_invalid_playlist');
  const lines=body.split(/\r?\n/),items=[];
  if(lines.some(l=>/^#EXT-X-(?:KEY|SESSION-KEY):/.test(l)&&(/METHOD=SAMPLE-AES|KEYFORMAT="(?!identity")/i.test(l))))throw Error('eneyida_unsupported_stream');
@@ -172,14 +172,14 @@ export function hlsQualities(body,base){
   if(!pending||!line.trim()||line.startsWith('#'))continue;
   const resolution=pending.match(/RESOLUTION=(\d+)x(\d+)/i),width=Number(resolution?.[1]),pixels=Number(resolution?.[2]);
   const height=width>=3800||pixels>=2160?2160:width>=2500||pixels>=1440?1440:width>=1900||pixels>=1080?1080:width>=1200||pixels>=720?720:width>=800||pixels>=480?480:width>=600||pixels>=360?360:null;
-  let url;try{url=trustedURL(new URL(line.trim(),base)).toString();}catch{pending=null;continue;}
+  let url;try{url=validate(new URL(line.trim(),base)).toString();}catch{pending=null;continue;}
   if(height&&!items.some(item=>item.quality===height+'p'))items.push({quality:height+'p',url});
   pending=null;
  }
  // Keep the master when video-only variants depend on a separate audio group.
- if(hasAudio&&items.length)return [{quality:'Авто',url:trustedURL(base).toString(),available_qualities:items.map(item=>item.quality)}];
+ if(hasAudio&&items.length)return [{quality:'Авто',url:validate(base).toString(),available_qualities:items.map(item=>item.quality)}];
  if(items.length)return items.sort((a,b)=>parseInt(b.quality)-parseInt(a.quality));
- if(lines.some(line=>line.startsWith('#EXTINF:')))return [{quality:'Авто',url:trustedURL(base).toString()}];
+ if(lines.some(line=>line.startsWith('#EXTINF:')))return [{quality:'Авто',url:validate(base).toString()}];
  throw Error('eneyida_invalid_playlist');
 }
 export async function resolvePlayerItem(item){

@@ -1,6 +1,6 @@
 {
   "name": "xot-online",
-  "version": "0.3.5",
+  "version": "0.3.6",
   "private": true,
   "type": "module",
   "scripts": {
@@ -16,7 +16,9 @@
     "smoke:kinovezha": "node scripts/smoke-public-players.mjs kinovezha",
     "smoke:uaserials": "node scripts/smoke-public-players.mjs uaserials",
     "smoke:features": "node scripts/smoke-features.mjs",
-    "server:start": "node server/index.mjs"
+    "server:start": "node server/index.mjs",
+    "smoke:uakino": "node scripts/smoke-public-players.mjs uakino",
+    "smoke:backup": "node scripts/smoke-backup.mjs"
   },
   "devDependencies": {
     "playwright-core": "^1.61.1",
