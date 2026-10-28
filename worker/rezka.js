@@ -149,7 +149,7 @@ export function parseRezkaStreams(value){
  if(!items.length&&data.startsWith('#'))throw Error('rezka_unsupported_stream_format');
  return items;
 }
-function mediaURL(value){
+export function mediaURL(value){
  const url=new URL(value);
  if(url.protocol!=='https:'||url.username||url.password||url.port||!/(?:^|\.)(?:voidboost\.(?:cc|net|one|tv|com|io)|ukrtelcdn\.net|sambray\.org)$/i.test(url.hostname))throw Error('rezka_unsupported_stream_format');
  return url;

@@ -74,6 +74,14 @@ test('Diagnostic route overrides require authorization and cannot be arbitrary o
  const unauth=req({action:'post',path},'wrong');unauth.headers.set('x-xot-diagnostics','1');unauth.headers.set('x-xot-rezka-route','home');assert.equal((await handle(unauth)).status,401);assert.equal(calls,0);
 });
 
+test('Small media samples are available only with authenticated owner diagnostics',async()=>{
+ let calls=0;const handle=createVercelRezka({env:{XOT_SERVER_TOKEN:token},fetcher:async(url)=>{calls++;return String(url).includes('/ajax/')?Response.json({success:true,url:'[720p]https://stream.voidboost.one/a.m3u8'}):new Response('#EXTM3U\n1.ts');}});
+ const ordinary=req({action:'stream',id:123,translator_id:42});ordinary.headers.set('x-xot-media-sample','1');assert.equal((await handle(ordinary)).status,400);
+ const unauth=req({action:'stream',id:123,translator_id:42},'wrong');unauth.headers.set('x-xot-media-sample','1');unauth.headers.set('x-xot-diagnostics','1');assert.equal((await handle(unauth)).status,401);assert.equal(calls,0);
+ const owner=req({action:'stream',id:123,translator_id:42});owner.headers.set('x-xot-media-sample','1');owner.headers.set('x-xot-diagnostics','1');
+ const result=await (await handle(owner)).json();assert.equal(result.media_sample.fragment_url,'https://stream.voidboost.one/1.ts');assert.ok(!JSON.stringify(result).includes(token));
+});
+
 const translations=[{id:'42',title:'Українська',is_ads:'1'},{id:'7',title:'Original'}];
 function diagnosticAPI(){
  const calls=[];

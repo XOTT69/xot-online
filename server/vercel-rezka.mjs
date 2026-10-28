@@ -1,5 +1,6 @@
 import {timingSafeEqual} from 'node:crypto';
 import {handleRezka} from '../worker/rezka.js';
+import {sampleRezkaMedia} from './rezka-media-probe.mjs';
 
 const headers={'content-type':'application/json; charset=utf-8','cache-control':'no-store','x-content-type-options':'nosniff'};
 const reply=(data,status=200)=>Response.json(data,{status,headers});
@@ -64,13 +65,16 @@ export function createVercelRezka({env=process.env,fetcher=fetch}={}){
   if(supplied.length!==expected.length||!timingSafeEqual(supplied,expected))return reply({error:'unauthorized'},401);
   try{
    const diagnose=request.headers.get('x-xot-diagnostics')==='1',traces=[];
-   const route=request.headers.get('x-xot-rezka-route'),profile=request.headers.get('x-xot-client');
+   const route=request.headers.get('x-xot-rezka-route'),profile=request.headers.get('x-xot-client'),sample=request.headers.get('x-xot-media-sample');
+   if(sample&&(!diagnose||sample!=='1'))return reply({error:'invalid_diagnostic_route'},400);
    if((route||profile)&&(!diagnose||route&&!Object.hasOwn(diagnosticOrigins,route)||profile&&!['native','compatible'].includes(profile)))return reply({error:'invalid_diagnostic_route'},400);
    const origin=route?diagnosticOrigins[route]:env.XOT_REZKA_ORIGIN;
    const transport=profile==='compatible'?(url,options)=>fetcher(url,{...options,headers:{...options.headers,'user-agent':'Mozilla/5.0 (compatible; XOT-Lampa/0.3.16)'}}):fetcher;
    const response=await handleRezka(request,{XOT_REZKA_ORIGIN:origin,XOT_VERIFY_MEDIA:env.XOT_VERIFY_MEDIA},diagnose?(url,options)=>traceFetch(transport,url,options,traces):transport);
    if(!diagnose)return response;
-   return reply({...await response.json(),diagnostics:traces,diagnostic_route:route||'configured',diagnostic_client:profile||'native'},response.status);
+   const data=await response.json();
+   if(sample&&response.ok&&data.items){try{data.media_sample=await sampleRezkaMedia(data.items,transport);}catch{data.media_sample={error:'media_probe_unavailable'};}}
+   return reply({...data,diagnostics:traces,diagnostic_route:route||'configured',diagnostic_client:profile||'native'},response.status);
   }catch{return reply({error:'backend_unavailable'},502);}
  };
 }
