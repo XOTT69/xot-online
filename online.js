@@ -1,7 +1,7 @@
 (function () {
 'use strict';
 if (!window.Lampa || window.__XOT_ONLINE_INITIALIZED__) return;
-var VERSION='0.3.15', DEFAULT_API='https://xot-online.ai-beta69690.workers.dev';
+var VERSION='0.3.16', DEFAULT_API='https://xot-online.ai-beta69690.workers.dev';
 var API_BASE=window.__XOT_API_BASE__ || (function () {
  var scripts=document.getElementsByTagName('script');
  for(var i=scripts.length-1;i>=0;i--){
@@ -280,6 +280,8 @@ function readableError(error){
  var publicError=code.match(/^(kinovezha|uaserials|ufdub|serialno)_(.+)$/);
  if(publicError){var name={kinovezha:'KinoVezha',uaserials:'UASerials',ufdub:'UFDub',serialno:'Serialno'}[publicError[1]];return (eneyidaErrors['eneyida_'+publicError[2]]||'Eneyida не відповіла коректно. Повтори запит або вибери інший балансер.').replace(/Eneyida/g,name);}
  if(eneyidaErrors[code])return eneyidaErrors[code];
+ if(code==='rezka_movie_mismatch')return 'Сторінка HDRezka не відповідає назві, року або типу відкритої картки. Уточни пошук.';
+ if(code==='rezka_auth_required')return 'Це озвучення HDRezka потребує входу або відповідного доступу в сервісі. Обери доступне гостьове озвучення.';
  var errors={anilibria_unavailable:'AniLibria зараз недоступна. Спробуй інший балансер.',anilibria_timeout:'AniLibria не відповіла вчасно.',anilibria_restricted:'AniLibria обмежила доступ до цього релізу.',anilibria_invalid_response:'AniLibria змінила формат відповіді.',filmix_unavailable:'Filmix зараз недоступний. Перемкни балансер або повтори пошук.',filmix_timeout:'Filmix не відповів вчасно.',filmix_http_403:'Filmix обмежив доступ.',filmix_http_401:'Filmix відхилив авторизацію. Від’єднай пристрій або перевір акаунт.',filmix_invalid_json:'Filmix повернув невідомий формат відповіді.',rezka_access_denied:'HDRezka повернула 403 або обмеження доступу. Спробуй інший балансер.',rezka_mirror_redirect:'Адреса HDRezka змінилася. Потрібно оновити адресу джерела на сервері.',rezka_player_not_found:'На сторінці HDRezka не знайдено доступного плеєра.',rezka_stream_unavailable:'Це відео або озвучення HDRezka зараз недоступне.',rezka_timeout:'HDRezka не відповіла вчасно.',rezka_unavailable:'Не вдалося з’єднатися з HDRezka.',rezka_unsupported_stream_format:'HDRezka змінила формат відповіді плеєра.',request_timeout:'Сервер не відповів вчасно. Повтори запит.',invalid_response:'Сервер повернув некоректну відповідь.'};
  return errors[code]||'Джерело не відповіло коректно ('+code.slice(0,70)+').';
 }
@@ -289,6 +291,7 @@ function jsonRequest(path,body,signal){
  return fetch(API_BASE+path,options).then(function(response){return response.json().catch(function(){throw Error('invalid_response');}).then(function(data){if(!response.ok||data.error)throw Error(data.error||'http_'+response.status);return data;});});
 }
 function request(source,action,data,signal){
+
  var body=Object.assign({},data||{},{action:action});
  if(source==='filmix'){
   body.device_id=identity();
@@ -561,7 +564,7 @@ function registerScreen(){
   }
   function chooseVoice(){
    var options=voiceItems();if(!options.length)return notify('Спочатку дочекайся завантаження озвучень.');
-   if(sourceId==='rezka')return select(options.map(function(v){return {title:safeText(v.title),voice:v.rezka,selected:rezkaVoice&&rezkaVoice.id===v.id};}),'Озвучення',function(v){if(post.series)chooseRezkaVoice(v.voice);else loadRezkaStream(v.voice,null,null);},self.start);
+   if(sourceId==='rezka')return select((post.series?[]:[{title:'Усі озвучення',all:true,selected:!voice}]).concat(options.map(function(v){return {title:safeText(v.title),voice:v.rezka,selected:voice&&rezkaVoice&&rezkaVoice.id===v.id};})),'Озвучення',function(v){if(v.all){voice=null;rezkaVoice=null;saveVoice();return drawRezkaVoices();}if(post.series)return chooseRezkaVoice(v.voice);voice=v.voice.id;rezkaVoice=v.voice;saveVoice();drawRezkaVoices();},self.start);
    var favorites=favoriteVoices(),automatic=!Object.prototype.hasOwnProperty.call(get('xot_native_voices',{}),voicePreferenceKey())&&(favorites.length||get('xot_prefer_ukrainian',true));
    return select([{title:favorites.length?'Автовибір: улюблені, потім українська':'Автовибір української',value:'__auto__',selected:!!automatic},{title:'Усі озвучення',value:null,selected:!voice&&!automatic},{title:'Улюблені озвучення · налаштувати',favorites:true}].concat(options.map(function(v){return {title:safeText(v.title),value:v.id,selected:v.id===voice&&!automatic};})),'Озвучення',function(v){
     if(v.favorites)return manageFavoriteVoices();
@@ -659,7 +662,7 @@ function registerScreen(){
    var options=voiceItems();
    if(options.length)controls.push({title:'Озвучення: '+(voice==='__uk__'?'українська · авто':sourceId==='rezka'?rezkaVoice&&rezkaVoice.title||'обрати':(options.filter(function(v){return v.id===voice;})[0]||{}).title||'усі'),action:'voice'});
    if(voiceButton){
-    var selected=sourceId==='rezka'?rezkaVoice&&rezkaVoice.title:(options.filter(function(v){return v.id===voice;})[0]||{}).title;
+    var selected=sourceId==='rezka'?voice&&rezkaVoice&&rezkaVoice.title:(options.filter(function(v){return v.id===voice;})[0]||{}).title;
     voiceButton.toggleClass('hide',!options.length).toggleClass('selector',!!options.length);
     voiceButton.find('div').text(voice==='__uk__'?'Українська · авто':selected||'Усі · '+options.length);
    }
@@ -712,7 +715,7 @@ function registerScreen(){
   }
   function postPayload(item,which,force){
    var payload={id:item.id,path:item.path};
-   if(publicPlayerSource(which.id)&&(!manual||force))payload.movie={titles:names(card),year:String(card.release_date||card.first_air_date||'').slice(0,4),series:Boolean(card.name||card.first_air_date||card.media_type==='tv')};
+   if((which.id==='rezka'||publicPlayerSource(which.id))&&(!manual||force))payload.movie={titles:names(card),year:String(card.release_date||card.first_air_date||'').slice(0,4),series:Boolean(card.name||card.first_air_date||card.media_type==='tv')};
    return payload;
   }
   function rememberAliases(which,exact){
@@ -779,10 +782,10 @@ function registerScreen(){
     if(sourceId!=='rezka'){streams=(data.items||[]).filter(streamItem);unavailable=data.unavailable||[];qualityCap=data.quality_cap||null;if(singleDiagnostic){singleDiagnostic.status=streams.length?'ready':'empty';singleDiagnostic.count=displayGroups(streams,false).length;if(!streams.length&&unavailable.length)singleDiagnostic.reason='locked';}restoreVoice();state='streams';drawStreams();}
     else{
      if(singleDiagnostic)singleDiagnostic.status='open';
-     var saved=get('xot_native_voices',{})[voicePreferenceKey()],options=data.translations||[];
+     var preferences=get('xot_native_voices',{}),saved=preferences[voicePreferenceKey()],options=data.translations||[],explicitAll=!data.series&&Object.prototype.hasOwnProperty.call(preferences,voicePreferenceKey())&&saved===null;
      var preferred=saved&&options.filter(function(v){return v.id===saved.id&&v.title===saved.title;})[0];
      if(!Object.prototype.hasOwnProperty.call(get('xot_native_voices',{}),voicePreferenceKey())){var favorite=favoriteVoice(options.map(function(v){return {voice_id:v.id,translation:v.title};}),[]);if(favorite)preferred=options.find(function(v){return v.id===favorite.voice_id;});}
-     if(!preferred&&get('xot_prefer_ukrainian',true))preferred=options.filter(function(v){return ukrainian({translation:v.title});})[0];
+     if(!preferred&&!explicitAll&&get('xot_prefer_ukrainian',true))preferred=options.filter(function(v){return ukrainian({translation:v.title});})[0];
      voice=preferred?preferred.id:null;rezkaVoice=preferred||null;
      if(data.series)chooseRezkaVoice(preferred||options[0],false);else{state='translations';drawRezkaVoices();}
     }
@@ -791,7 +794,7 @@ function registerScreen(){
   function drawRezkaVoices(){
    clear();state='translations';
    appendContinue();
-   (post.translations||[]).filter(function(v){return !voice||v.id===voice;}).forEach(function(v){watchRow(line(v.title,'Обрати якість відео',function(){loadRezkaStream(v,null,null);},true),{provider:'rezka',translation:v.title});});
+   (post.translations||[]).filter(function(v){return !voice||v.id===voice;}).forEach(function(v){watchRow(line(v.title,'Обрати якість відео',function(){loadRezkaStream(v,null,null);},true),{provider:'rezka',translation:v.title,voice_id:v.id});});
    if(!post.translations.length)line('Озвучень не знайдено','Перевір інший балансер.');
    finish();updateFilter();self.start();
   }
@@ -808,11 +811,11 @@ function registerScreen(){
    clear();state='episodes';var group=episodeList.filter(function(s){return s.season===season;})[0];
    appendContinue();
    if(!group)line('Серій не знайдено','Спробуй інше озвучення або балансер.');
-   else group.episodes.forEach(function(n){watchRow(line('Серія '+n,rezkaVoice.title,function(){loadRezkaStream(rezkaVoice,season,n);},true),{provider:'rezka',season:season,episode:n,translation:rezkaVoice.title});});
+   else group.episodes.forEach(function(n){watchRow(line('Серія '+n,rezkaVoice.title,function(){loadRezkaStream(rezkaVoice,season,n);},true),{provider:'rezka',season:season,episode:n,translation:rezkaVoice.title,voice_id:rezkaVoice.id});});
    finish();updateFilter();self.start();if(season)ensureSeasonMetadata(season);
   }
   function loadRezkaStream(v,s,e){
-   var operation=begin(),previous=post.series?'episodes':'translations';rezkaVoice=v;voice=v.id;if(!post.series)saveVoice();loading('Отримуємо відео…');
+   var operation=begin(),previous=post.series?'episodes':'translations';rezkaVoice=v;if(post.series)voice=v.id;loading('Отримуємо відео…');
    request('rezka','stream',Object.assign({},v,{id:post.id,translator_id:v.id,title:post.title,translation:v.title,series:post.series,season:s,episode:e,favs:post.favs||''}),operation.signal).then(function(data){
     if(!current(operation.token))return;finish();state=previous;
     var items=(data.items||[]).filter(function(item){return media(item.url);});

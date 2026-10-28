@@ -1,7 +1,7 @@
-import {parseDocument, DomUtils} from 'htmlparser2';
+import {parseDocument,DomUtils} from 'htmlparser2';
 import {sameMovie} from './matching.js';
 
-const DEFAULT_ORIGIN='https://hdrezka.ag';
+const DEFAULT_ORIGIN='https://rezka.ag';
 const HEADERS={'content-type':'application/json; charset=utf-8','cache-control':'no-store','access-control-allow-origin':'*','access-control-allow-methods':'POST, OPTIONS','access-control-allow-headers':'Content-Type','x-content-type-options':'nosniff'};
 const ID=/^\d{1,10}$/;
 const text=node=>DomUtils.textContent(node).replace(/\s+/g,' ').trim();
@@ -23,17 +23,17 @@ function pathOf(value){
  if(!/^\/(?:films|series|animation|cartoons)\/[a-z0-9_/-]+\.html$/i.test(path)||path.includes('..')||path.length>500)throw Error('rezka_invalid_path');
  return path;
 }
-async function upstream(origin,path,form,redirects=0){
+async function upstream(origin,path,form,redirects=0,fetcher=fetch){
  const url=new URL(path,origin);
  if(url.origin!==origin)throw Error('rezka_invalid_path');
- const headers={accept:form?'application/json':'text/html','user-agent':'XOT-Lampa/0.3.0','referer':origin+'/'};
+ const headers={accept:form?'application/json':'text/html','user-agent':'XOT-Lampa/0.3.16','referer':origin+'/'};
  if(form){headers['content-type']='application/x-www-form-urlencoded';headers['x-requested-with']='XMLHttpRequest';headers.origin=origin;}
- const response=await fetch(url,{method:form?'POST':'GET',headers,body:form?new URLSearchParams(form).toString():undefined,redirect:'manual',signal:AbortSignal.timeout(8000)});
+ const response=await fetcher(url,{method:form?'POST':'GET',headers,body:form?new URLSearchParams(form).toString():undefined,redirect:'manual',signal:AbortSignal.timeout(8000)});
  if(response.status>=300&&response.status<400){
   const next=new URL(response.headers.get('location')||origin,url);
   try{trustedOrigin(next);}catch{throw Error('rezka_mirror_redirect');}
   if(redirects>=3)throw Error('rezka_mirror_redirect');
-  return upstream(next.origin,next.pathname+next.search,form,redirects+1);
+  return upstream(next.origin,next.pathname+next.search,form,redirects+1,fetcher);
  }
  if(response.status===403||response.status===429)throw Error('rezka_access_denied');
  if(!response.ok)throw Error('rezka_http_'+response.status);
@@ -42,7 +42,11 @@ async function upstream(origin,path,form,redirects=0){
  if(/cf-chl-|Just a moment|captcha-container|<title>[^<]*(?:Проверяем[^<]*не бот|verify[^<]*human)/i.test(body))throw Error('rezka_access_denied');
  if(!form)return {body,origin};
  let data;try{data=JSON.parse(body);}catch{throw Error('rezka_invalid_response');}
- if(!data||data.success===false)throw Error('rezka_stream_unavailable');
+ if(!data||data.success===false){
+  const message=String(data?.message||data?.error||'');
+  if(/premium|премиум|преміум|авториз|войдите|войти в аккаунт|увійдіть/i.test(message))throw Error('rezka_auth_required');
+  throw Error('rezka_stream_unavailable');
+ }
  return data;
 }
 export function parseRezkaSearch(html,origin=DEFAULT_ORIGIN){
@@ -67,17 +71,27 @@ export function parseRezkaSearch(html,origin=DEFAULT_ORIGIN){
  }
  return results.slice(0,50);
 }
+export function parseRezkaMetadata(html,path){
+ pathOf(path);const root=parseDocument(html),titleNode=first(root,n=>hasClass(n,'b-post__title')),original=first(root,n=>hasClass(n,'b-post__origtitle'));
+ const info=first(root,n=>hasClass(n,'b-post__info')),dateRow=info&&all(info,n=>n.name==='tr').find(n=>/^(?:Год|Дата выхода|Рік)/u.test(text(n))),year=dateRow&&text(dateRow).match(/\b(?:19|20)\d{2}\b/);
+ const imdb=first(info||root,n=>n.name==='a'&&/^https?:\/\/(?:www\.)?imdb\.com\/title\/tt\d+(?:\/|$)/i.test(n.attribs?.href||''))?.attribs?.href.match(/\/title\/(tt\d+)/)?.[1],kind=html.match(/\.initCDN(Movies|Series)Events\(/)?.[1];
+ return {id:path.match(/\/(\d+)-[^/]+\.html$/)?.[1],path,title:titleNode?limit(text(titleNode)):'',original_title:original?limit(text(original)):'',year:year?Number(year[0]):null,series:kind?kind==='Series':path.startsWith('/series/')?true:path.startsWith('/films/')?false:undefined,...(imdb?{imdb_id:imdb}:{})};
+}
 export function parseRezkaPost(html,path){
  const root=parseDocument(html);
  const init=html.match(/\.initCDN(Movies|Series)Events\(\s*(\d+)\s*,\s*(\d+)/);
  const id=first(root,n=>n.attribs?.id==='post_id')?.attribs?.value||init?.[2];
  if(!ID.test(String(id)))throw Error('rezka_player_not_found');
+ const metadata=parseRezkaMetadata(html,path);if(metadata.id&&String(id)!==metadata.id)throw Error('rezka_movie_mismatch');
  const list=first(root,n=>n.attribs?.id==='translators-list');
- const translations=list?all(list,n=>ID.test(n.attribs?.['data-translator_id']||'')).map(n=>({id:n.attribs['data-translator_id'],title:limit(text(n),120),is_camrip:n.attribs['data-camrip']||'0',is_ads:n.attribs['data-ads']||'0',is_director:n.attribs['data-director']||'0'})):[];
+ const seen=new Set(),translations=[];
+ if(list)for(const node of all(list,n=>ID.test(n.attribs?.['data-translator_id']||''))){
+  const voiceId=node.attribs['data-translator_id'];if(seen.has(voiceId)||all(node,n=>n.attribs?.['data-translator_id']===voiceId).length)continue;seen.add(voiceId);
+  translations.push({id:voiceId,title:limit(text(node),120),is_camrip:node.attribs['data-camrip']||'0',is_ads:node.attribs['data-ads']||'0',is_director:node.attribs['data-director']||'0',...(hasClass(node,'b-prem_translator')?{premium:true}:{})});
+ }
  if(!translations.length&&init)translations.push({id:init[3],title:'Основне озвучення',is_camrip:'0',is_ads:'0',is_director:'0'});
  if(!translations.length)throw Error('rezka_translations_not_found');
- const titleNode=first(root,n=>hasClass(n,'b-post__title'));
- return {id:String(id),path,title:titleNode?limit(text(titleNode)):'',series:init?.[1]==='Series'||path.startsWith('/series/'),translations};
+ return {...metadata,id:String(id),series:init?.[1]==='Series'||metadata.series,translations};
 }
 export function parseRezkaEpisodes(html){
  const root=parseDocument(html),seasons=new Map();
@@ -114,10 +128,10 @@ export function parseRezkaStreams(value){
 }
 function safeError(error){
  const code=String(error?.message||'');
- if(/^rezka_(?:invalid_origin|invalid_path|mirror_redirect|access_denied|http_\d{3}|response_too_large|invalid_response|stream_unavailable|player_not_found|translations_not_found|unsupported_stream_format)$/.test(code))return code;
+ if(/^rezka_(?:invalid_origin|invalid_path|mirror_redirect|access_denied|auth_required|movie_mismatch|http_\d{3}|response_too_large|invalid_response|stream_unavailable|player_not_found|translations_not_found|unsupported_stream_format)$/.test(code))return code;
  return /abort|timeout/i.test(code)?'rezka_timeout':'rezka_unavailable';
 }
-export async function handleRezka(request,env={}){
+export async function handleRezka(request,env={},fetcher=fetch){
  if(request.method==='OPTIONS')return new Response(null,{status:204,headers:HEADERS});
  if(request.method!=='POST')return reply({error:'method_not_allowed'},405);
  let input;try{const raw=await request.text();if(raw.length>4096)return reply({error:'request_too_large'},413);input=JSON.parse(raw);}catch{return reply({error:'invalid_json'},400);}
@@ -125,35 +139,43 @@ export async function handleRezka(request,env={}){
  const action=limit(input.action,24);
  if(!['probe','search','post','episodes','stream'].includes(action))return reply({error:'invalid_action'},400);
  if(action==='search'&&(!input.title||String(input.title).length>200))return reply({error:'invalid_query'},400);
- if(action==='search'&&input.movie){
+ if(['search','post'].includes(action)&&input.movie){
   const movie=input.movie;
-  if(typeof movie!=='object'||Array.isArray(movie)||!Array.isArray(movie.titles)||movie.titles.length>8||movie.titles.some(title=>typeof title!=='string'||title.length>200)||movie.year&&!/^\d{4}$/.test(String(movie.year)))return reply({error:'invalid_movie'},400);
+  if(typeof movie!=='object'||Array.isArray(movie)||!Array.isArray(movie.titles)||!movie.titles.length||movie.titles.length>8||movie.titles.some(title=>typeof title!=='string'||!title.trim()||title.length>200)||movie.year&&!/^\d{4}$/.test(String(movie.year))||movie.series!==undefined&&typeof movie.series!=='boolean')return reply({error:'invalid_movie'},400);
  }
  if(['episodes','stream'].includes(action)&&(!ID.test(String(input.id||''))||!ID.test(String(input.translator_id||''))))return reply({error:'invalid_id'},400);
  if(action==='stream'&&input.series&&(!ID.test(String(input.season||''))||!ID.test(String(input.episode||''))))return reply({error:'invalid_episode'},400);
  if(action==='post'){try{pathOf(input.path);}catch{return reply({error:'rezka_invalid_path'},400);}}
  try{
   const origin=originOf(env);
-  if(action==='probe'){await upstream(origin,'/');return reply({status:'reachable',origin});}
+  const load=(path,form)=>upstream(origin,path,form,0,fetcher),query=input.movie&&{title:input.movie.titles[0],alternative_titles:input.movie.titles.slice(1),year:input.movie.year,series:input.movie.series};
+  if(action==='probe'){await load('/');return reply({status:'reachable',origin});}
   if(action==='search'){
    const params=new URLSearchParams({do:'search',subaction:'search',q:limit(input.title)});
-   const html=await upstream(origin,'/search/?'+params);
+   const html=await load('/search/?'+params);
    let results=parseRezkaSearch(html.body,html.origin);
    if(input.movie){
-    const movie=input.movie;
-    results=results.filter(item=>sameMovie(item,{title:movie.titles[0],alternative_titles:movie.titles.slice(1),year:movie.year,series:typeof movie.series==='boolean'?movie.series:undefined}));
+    const exact=results.filter(item=>sameMovie(item,query));
+    if(exact.length)results=exact;
+    else{
+     const candidates=results.filter(item=>(!query.year||!item.year||Number(query.year)===item.year)&&(query.series===undefined||item.series===undefined||query.series===item.series)).slice(0,3);
+     const checked=await Promise.all(candidates.map(async item=>{const page=await load(item.path);return {...item,...parseRezkaMetadata(page.body,item.path)};}));
+     results=checked.filter(item=>sameMovie(item,query));
+    }
    }
    return reply({results});
   }
   if(action==='post'){
-   const path=pathOf(input.path),page=await upstream(origin,path);
-   return reply(parseRezkaPost(page.body,path));
+   const path=pathOf(input.path),page=await load(path),post=parseRezkaPost(page.body,path);
+   if(query&&!sameMovie(post,query))throw Error('rezka_movie_mismatch');
+   return reply(post);
   }
   const form={id:String(input.id),translator_id:String(input.translator_id),action:action==='episodes'?'get_episodes':input.series?'get_stream':'get_movie'};
   if(action==='stream'&&input.series){form.season=String(input.season);form.episode=String(input.episode);}
   for(const key of ['is_camrip','is_ads','is_director'])form[key]=input[key]==='1'?'1':'0';
-  const data=await upstream(origin,'/ajax/get_cdn_series/?t='+Date.now(),form);
+  const data=await load('/ajax/get_cdn_series/?t='+Date.now(),form);
   if(action==='episodes')return reply({seasons:parseRezkaEpisodes(String(data.episodes||''))});
-  return reply({items:parseRezkaStreams(data.url).map(item=>({title:limit(input.title)||'Відео',provider:'rezka',source:'HDRezka',translation:limit(input.translation,120),season:input.series?Number(input.season):null,episode:input.series?Number(input.episode):null,...item}))});
+  const items=parseRezkaStreams(data.url);if(!items.length)throw Error('rezka_stream_unavailable');
+  return reply({items:items.map(item=>({title:limit(input.title)||'Відео',provider:'rezka',source:'HDRezka',translation:limit(input.translation,120),season:input.series?Number(input.season):null,episode:input.series?Number(input.episode):null,...item}))});
  }catch(error){return reply({error:safeError(error)},502);}
 }
