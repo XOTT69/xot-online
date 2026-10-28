@@ -149,6 +149,37 @@ export function parseRezkaStreams(value){
  if(!items.length&&data.startsWith('#'))throw Error('rezka_unsupported_stream_format');
  return items;
 }
+function mediaURL(value){
+ const url=new URL(value);
+ if(url.protocol!=='https:'||url.username||url.password||url.port||!/(?:^|\.)(?:voidboost\.(?:cc|net|one|tv|com|io)|ukrtelcdn\.net|sambray\.org)$/i.test(url.hostname))throw Error('rezka_unsupported_stream_format');
+ return url;
+}
+async function resolveMedia(value,fetcher){
+ let url=mediaURL(value);
+ for(let redirects=0;redirects<=2;redirects++){
+  const hls=/\.m3u8$/i.test(url.pathname),response=await fetcher(url,{method:'GET',headers:hls?{}:{range:'bytes=0-4095'},redirect:'manual',signal:AbortSignal.timeout(5000)});
+  if(response.status>=300&&response.status<400){
+   await response.body?.cancel();
+   const next=response.headers.get('location');if(!next||redirects===2)throw Error('rezka_stream_unavailable');url=mediaURL(new URL(next,url));continue;
+  }
+  if(![200,206].includes(response.status)){await response.body?.cancel();throw Error('rezka_stream_unavailable');}
+  const reader=response.body?.getReader();if(!reader)throw Error('rezka_stream_unavailable');
+  let chunk;try{chunk=await reader.read();}finally{await reader.cancel();}
+  const bytes=chunk?.value||new Uint8Array(),text=new TextDecoder().decode(bytes.slice(0,4096));
+  if(hls?text.trimStart().startsWith('#EXTM3U'):bytes.length>=8&&String.fromCharCode(...bytes.slice(4,8))==='ftyp')return url.href;
+  throw Error('rezka_stream_unavailable');
+ }
+ throw Error('rezka_stream_unavailable');
+}
+export async function resolveRezkaStreams(items,fetcher=fetch){
+ const resolved=await Promise.all(items.slice(0,6).map(async item=>{
+  for(const candidate of [item.url,...item.alternatives||[]].slice(0,2)){
+   try{const url=await resolveMedia(candidate,fetcher),{alternatives,...metadata}=item;return {...metadata,url};}catch{}
+  }
+  return null;
+ }));
+ const result=resolved.filter(Boolean);if(!result.length)throw Error('rezka_stream_unavailable');return result;
+}
 function safeError(error){
  const code=String(error?.message||'');
  if(/^rezka_(?:invalid_origin|invalid_path|mirror_redirect|access_denied|auth_required|session_expired|session_required|movie_mismatch|http_\d{3}|response_too_large|invalid_response|stream_unavailable|player_not_found|translations_not_found|unsupported_stream_format)$/.test(code))return code;
@@ -214,7 +245,8 @@ export async function handleRezka(request,env={},fetcher=fetch){
   const data=await load('/ajax/get_cdn_series/?t='+Date.now(),form);
   if(data.premium_content===1||data.premium_content==='1')throw Error('rezka_auth_required');
   if(action==='episodes')return reply({seasons:parseRezkaEpisodes(String(data.episodes||''))});
-  const items=parseRezkaStreams(data.url);if(!items.length)throw Error('rezka_stream_unavailable');
+  let items=parseRezkaStreams(data.url);if(!items.length)throw Error('rezka_stream_unavailable');
+  if(env.XOT_VERIFY_MEDIA==='1')items=await resolveRezkaStreams(items,fetcher);
   return reply({items:items.map(item=>({title:limit(input.title)||'Відео',provider:'rezka',source:'HDRezka',voice_id:String(input.translator_id),translation:limit(input.translation,120),season:input.series?Number(input.season):null,episode:input.series?Number(input.episode):null,...item}))});
  }catch(error){return reply({error:safeError(error)},502);}
 }

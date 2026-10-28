@@ -18,3 +18,5 @@ services:
         generateValue: true
       - key: XOT_REZKA_ORIGIN
         value: https://rezka-ua.pub
+      - key: XOT_VERIFY_MEDIA
+        value: "1"

@@ -16,6 +16,11 @@ function safeMessage(value){
 // source error. Never return request headers, cookies or media URLs.
 async function traceFetch(fetcher,url,options,traces){
  const response=await fetcher(url,options);
+ if(options?.method==='GET'&&/\.(?:m3u8|mp4)(?:$|:hls:)/i.test(new URL(url).pathname)&&traces.length<20){
+  const location=response.headers.get('location');
+  let redirect_host=null;try{if(location)redirect_host=new URL(location,url).hostname;}catch{}
+  traces.push({action:'media',host:new URL(url).hostname,status:response.status,redirect_host});
+ }
  if(options?.method==='GET'&&/\/(?:films|series)\//.test(new URL(url).pathname)&&traces.length<8){
   try{
    const html=await response.clone().text(),init=html.match(/\.initCDN(?:Movies|Series)Events\(\s*(\d+)\s*,\s*(\d+)/);
@@ -63,7 +68,7 @@ export function createVercelRezka({env=process.env,fetcher=fetch}={}){
    if((route||profile)&&(!diagnose||route&&!Object.hasOwn(diagnosticOrigins,route)||profile&&!['native','compatible'].includes(profile)))return reply({error:'invalid_diagnostic_route'},400);
    const origin=route?diagnosticOrigins[route]:env.XOT_REZKA_ORIGIN;
    const transport=profile==='compatible'?(url,options)=>fetcher(url,{...options,headers:{...options.headers,'user-agent':'Mozilla/5.0 (compatible; XOT-Lampa/0.3.16)'}}):fetcher;
-   const response=await handleRezka(request,{XOT_REZKA_ORIGIN:origin},diagnose?(url,options)=>traceFetch(transport,url,options,traces):transport);
+   const response=await handleRezka(request,{XOT_REZKA_ORIGIN:origin,XOT_VERIFY_MEDIA:env.XOT_VERIFY_MEDIA},diagnose?(url,options)=>traceFetch(transport,url,options,traces):transport);
    if(!diagnose)return response;
    return reply({...await response.json(),diagnostics:traces,diagnostic_route:route||'configured',diagnostic_client:profile||'native'},response.status);
   }catch{return reply({error:'backend_unavailable'},502);}

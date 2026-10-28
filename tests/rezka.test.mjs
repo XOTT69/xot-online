@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {parseRezkaSearch,parseRezkaPost,parseRezkaEpisodes,parseRezkaStreams,parseRezkaMetadata,handleRezka} from '../worker/rezka.js';
+import {parseRezkaSearch,parseRezkaPost,parseRezkaEpisodes,parseRezkaStreams,parseRezkaMetadata,resolveRezkaStreams,handleRezka} from '../worker/rezka.js';
 const req=body=>new Request('https://xot.test/api/rezka',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)});
 const path='/films/fiction/123-example-2021.html';
 const search=`<div class="b-content__inline_item" data-id="123"><div class="b-content__inline_item-cover"><a href="${path}"><img></a></div><div class="b-content__inline_item-link"><a href="${path}">Example &amp; Film</a><div>2021, США</div></div></div>`;
@@ -18,6 +18,22 @@ test('Rezka decodes public base64 player format with known padding markers',()=>
 test('Published CDN alternatives survive parsing without duplicate quality rows',()=>{
  const items=parseRezkaStreams('[720p]https://first.example/video.m3u8 or https://second.example/video.m3u8 or https://second.example/video.m3u8,[1080p]https://first.example/hd.m3u8');
  assert.equal(items.length,2);assert.equal(items[0].url,'https://first.example/video.m3u8');assert.deepEqual(items[0].alternatives,['https://second.example/video.m3u8']);
+});
+test('Media resolution follows a source-published redirect and falls back from a dead CDN',async()=>{
+ const seen=[];
+ const result=await resolveRezkaStreams([{quality:'720p',url:'https://stream.voidboost.one/dead.m3u8',alternatives:['https://stream.voidboost.one/working.m3u8']}],async(url,options)=>{
+  const path=new URL(url).pathname;seen.push(path);assert.equal(options.headers.authorization,undefined);assert.equal(options.headers.cookie,undefined);
+  if(path==='/dead.m3u8')return new Response('',{status:404});
+  if(path==='/working.m3u8')return new Response('',{status:302,headers:{location:'https://prx1.ukrtelcdn.net/final.m3u8'}});
+  return new Response('#EXTM3U\n#EXTINF:4\nsegment.ts');
+ });
+ assert.equal(result[0].url,'https://prx1.ukrtelcdn.net/final.m3u8');assert.equal(result[0].alternatives,undefined);assert.deepEqual(seen,['/dead.m3u8','/working.m3u8','/final.m3u8']);
+});
+test('Media resolution rejects HTML, private or unrelated redirect hosts and accepts bounded MP4 ranges',async()=>{
+ let calls=0;
+ await assert.rejects(()=>resolveRezkaStreams([{quality:'720p',url:'https://stream.voidboost.one/a.m3u8'}],async()=>{calls++;return new Response('',{status:302,headers:{location:'https://127.0.0.1/private'}});}),/rezka_stream_unavailable/);assert.equal(calls,1);
+ await assert.rejects(()=>resolveRezkaStreams([{quality:'720p',url:'https://stream.voidboost.one/a.m3u8'}],async()=>new Response('<html>Not video</html>')),/rezka_stream_unavailable/);
+ const mp4=await resolveRezkaStreams([{quality:'1080p',url:'https://stream.voidboost.one/a.mp4'}],async(url,options)=>{assert.equal(options.headers.range,'bytes=0-4095');return new Response(new Uint8Array([0,0,0,24,102,116,121,112]),{status:206});});assert.equal(mp4[0].quality,'1080p');
 });
 test('unknown stream encodings report an actionable error',()=>{assert.throws(()=>parseRezkaStreams('#9%%%'),/rezka_unsupported_stream_format/);});
 test('Rezka rejects invalid IDs, paths and server origins before fetch',async()=>{
