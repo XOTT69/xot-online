@@ -2,8 +2,8 @@ name = "xot-online"
 main = "worker/index.js"
 compatibility_date = "2026-10-25"
 
-[vars]
-XOT_REZKA_BACKEND_URL = "https://xot-rezka-test.onrender.com"
+# The optional Rezka backend remains disconnected until device playback is
+# verified and transferring its API credential is explicitly authorized.
 
 [assets]
 directory = "./public"
