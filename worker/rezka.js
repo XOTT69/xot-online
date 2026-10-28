@@ -90,18 +90,17 @@ export function parseRezkaSearch(html,origin=DEFAULT_ORIGIN){
  }
  return results.slice(0,50);
 }
-export function parseRezkaMetadata(html,path){
- pathOf(path);const root=parseDocument(html),titleNode=first(root,n=>hasClass(n,'b-post__title')),original=first(root,n=>hasClass(n,'b-post__origtitle'));
+export function parseRezkaMetadata(html,path,root=parseDocument(html)){
+ pathOf(path);const titleNode=first(root,n=>hasClass(n,'b-post__title')),original=first(root,n=>hasClass(n,'b-post__origtitle'));
  const info=first(root,n=>hasClass(n,'b-post__info')),dateRow=info&&all(info,n=>n.name==='tr').find(n=>/^(?:Год|Дата выхода|Рік)/u.test(text(n))),year=dateRow&&text(dateRow).match(/\b(?:19|20)\d{2}\b/);
  const imdb=first(info||root,n=>n.name==='a'&&/^https?:\/\/(?:www\.)?imdb\.com\/title\/tt\d+(?:\/|$)/i.test(n.attribs?.href||''))?.attribs?.href.match(/\/title\/(tt\d+)/)?.[1],kind=html.match(/\.initCDN(Movies|Series)Events\(/)?.[1];
  return {id:path.match(/\/(\d+)-[^/]+\.html$/)?.[1],path,title:titleNode?limit(text(titleNode)):'',original_title:original?limit(text(original)):'',year:year?Number(year[0]):null,series:kind?kind==='Series':path.startsWith('/series/')?true:path.startsWith('/films/')?false:undefined,...(imdb?{imdb_id:imdb}:{})};
 }
-export function parseRezkaPost(html,path){
- const root=parseDocument(html);
+export function parseRezkaPost(html,path,root=parseDocument(html)){
  const init=html.match(/\.initCDN(Movies|Series)Events\(\s*(\d+)\s*,\s*(\d+)/);
  const id=first(root,n=>n.attribs?.id==='post_id')?.attribs?.value||init?.[2];
  if(!ID.test(String(id)))throw Error('rezka_player_not_found');
- const metadata=parseRezkaMetadata(html,path);if(metadata.id&&String(id)!==metadata.id)throw Error('rezka_movie_mismatch');
+ const metadata=parseRezkaMetadata(html,path,root);if(metadata.id&&String(id)!==metadata.id)throw Error('rezka_movie_mismatch');
  const list=first(root,n=>n.attribs?.id==='translators-list');
  const seen=new Set(),translations=[];
  if(list)for(const node of all(list,n=>ID.test(n.attribs?.['data-translator_id']||''))){
@@ -198,10 +197,10 @@ export async function handleRezka(request,env={},fetcher=fetch){
    // Start a fresh anonymous page session inside this invocation. The source's
    // own player sends ctrl_favs with the corresponding guest cookies. Nothing
    // is shared between users or returned to the browser.
-   const page=await load(input.path),post=parseRezkaPost(page.body,input.path);
+   const page=await load(input.path),root=parseDocument(page.body),post=parseRezkaPost(page.body,input.path,root);
    if(post.id!==String(input.id)||post.series!==(action==='episodes'||Boolean(input.series)))throw Error('rezka_movie_mismatch');
    if(!post.translations.some(voice=>voice.id===String(input.translator_id)))throw Error('rezka_translations_not_found');
-   const root=parseDocument(page.body),favs=first(root,node=>node.attribs?.id==='ctrl_favs')?.attribs?.value;
+   const favs=first(root,node=>node.attribs?.id==='ctrl_favs')?.attribs?.value;
    if(typeof favs!=='string'||!favs||favs.length>512)throw Error('rezka_session_required');
    targetOrigin=page.origin;session.referer=page.origin+input.path;form.favs=favs;
   }
@@ -211,6 +210,6 @@ export async function handleRezka(request,env={},fetcher=fetch){
   if(data.premium_content===1||data.premium_content==='1')throw Error('rezka_auth_required');
   if(action==='episodes')return reply({seasons:parseRezkaEpisodes(String(data.episodes||''))});
   const items=parseRezkaStreams(data.url);if(!items.length)throw Error('rezka_stream_unavailable');
-  return reply({items:items.map(item=>({title:limit(input.title)||'Відео',provider:'rezka',source:'HDRezka',translation:limit(input.translation,120),season:input.series?Number(input.season):null,episode:input.series?Number(input.episode):null,...item}))});
+  return reply({items:items.map(item=>({title:limit(input.title)||'Відео',provider:'rezka',source:'HDRezka',voice_id:String(input.translator_id),translation:limit(input.translation,120),season:input.series?Number(input.season):null,episode:input.series?Number(input.episode):null,...item}))});
  }catch(error){return reply({error:safeError(error)},502);}
 }

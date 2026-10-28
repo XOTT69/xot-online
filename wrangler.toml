@@ -2,6 +2,9 @@ name = "xot-online"
 main = "worker/index.js"
 compatibility_date = "2026-10-25"
 
+[vars]
+XOT_REZKA_BACKEND_URL = "https://xot-rezka-test.onrender.com"
+
 [assets]
 directory = "./public"
 binding = "ASSETS"

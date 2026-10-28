@@ -5,7 +5,7 @@ import {handleEneyida} from './eneyida.js';
 import {handleUkrainian} from './ukrainian.js';
 import {handleUFDub} from './ufdub.js';
 import {handleSerialno} from './serialno.js';
-import {forwardNative} from './backend.js';
+import {forwardNative,forwardRezka} from './backend.js';
 import {providers,normalize} from './providers.js';
 import {buildQueries,matchScore} from './matching.js';
 const headers={'content-type':'application/json; charset=utf-8','cache-control':'no-store','access-control-allow-origin':'*','x-content-type-options':'nosniff'};
@@ -21,6 +21,9 @@ function getQuery(url){return {title:(url.searchParams.get('title')||'').trim(),
 function check(q){return ((q.title && q.title.length<=200)||/^\d{1,12}$/.test(q.tmdb_id))&&(!q.year||/^\d{4}$/.test(q.year));}
 export default {async fetch(request,env){
  const url=new URL(request.url);
+ if(url.pathname==='/api/rezka'&&request.method==='POST'&&env.XOT_REZKA_BACKEND_URL){
+  try{return await forwardRezka(request,env);}catch{return json({error:'backend_unavailable'},502);}
+ }
  if(['/api/filmix','/api/rezka'].includes(url.pathname)&&request.method==='POST'&&env.XOT_BACKEND_URL){
   try{return await forwardNative(request,env);}catch{return json({error:'backend_unavailable'},502);}
  }

@@ -282,6 +282,8 @@ function readableError(error){
  if(eneyidaErrors[code])return eneyidaErrors[code];
  if(code==='rezka_movie_mismatch')return 'Сторінка HDRezka не відповідає назві, року або типу відкритої картки. Уточни пошук.';
  if(code==='rezka_auth_required')return 'Це озвучення HDRezka потребує входу або відповідного доступу в сервісі. Обери доступне гостьове озвучення.';
+ if(code==='rezka_session_expired'||code==='rezka_session_required')return 'HDRezka не підтвердила гостьову сесію. Повтори запит або відкрий картку ще раз.';
+ if(code==='backend_unavailable')return 'Не вдалося підготувати джерело. Повтори запит або обери інший балансер.';
  var errors={anilibria_unavailable:'AniLibria зараз недоступна. Спробуй інший балансер.',anilibria_timeout:'AniLibria не відповіла вчасно.',anilibria_restricted:'AniLibria обмежила доступ до цього релізу.',anilibria_invalid_response:'AniLibria змінила формат відповіді.',filmix_unavailable:'Filmix зараз недоступний. Перемкни балансер або повтори пошук.',filmix_timeout:'Filmix не відповів вчасно.',filmix_http_403:'Filmix обмежив доступ.',filmix_http_401:'Filmix відхилив авторизацію. Від’єднай пристрій або перевір акаунт.',filmix_invalid_json:'Filmix повернув невідомий формат відповіді.',rezka_access_denied:'HDRezka повернула 403 або обмеження доступу. Спробуй інший балансер.',rezka_mirror_redirect:'Адреса HDRezka змінилася. Потрібно оновити адресу джерела на сервері.',rezka_player_not_found:'На сторінці HDRezka не знайдено доступного плеєра.',rezka_stream_unavailable:'Це відео або озвучення HDRezka зараз недоступне.',rezka_timeout:'HDRezka не відповіла вчасно.',rezka_unavailable:'Не вдалося з’єднатися з HDRezka.',rezka_unsupported_stream_format:'HDRezka змінила формат відповіді плеєра.',request_timeout:'Сервер не відповів вчасно. Повтори запит.',invalid_response:'Сервер повернув некоректну відповідь.'};
  return errors[code]||'Джерело не відповіло коректно ('+code.slice(0,70)+').';
 }
@@ -344,7 +346,7 @@ function registerScreen(){
     if(sourceId==='all'){
      if(controller)controller.abort();allGroups.forEach(function(g){if(g.status==='loading'){g.status='error';g.error=Error('request_timeout');}});finish();refreshAggregate();
     }else{stopRequests();showError(Error('request_timeout'));}
-   }},24000);
+   }},sourceId==='rezka'?120000:24000);
    return {token:token,signal:controller.signal};
   }
   function finish(){clearTimeout(deadline);if(self.activity)self.activity.loader(false);}
@@ -801,7 +803,7 @@ function registerScreen(){
   function chooseRezkaVoice(v,manualChoice){
    if(!v)return showError(Error('rezka_stream_unavailable'));
    var operation=begin();rezkaVoice=v;voice=v.id;if(manualChoice!==false)saveVoice();loading('Завантажуємо серії…');
-   request('rezka','episodes',{id:post.id,translator_id:v.id},operation.signal).then(function(data){
+   request('rezka','episodes',{id:post.id,path:post.path,translator_id:v.id},operation.signal).then(function(data){
     if(!current(operation.token))return;finish();episodeList=data.seasons||[];
     if(!episodeList.some(function(s){return s.season===season;}))season=episodeList[0]&&episodeList[0].season;
     state='episodes';drawEpisodes();
@@ -816,7 +818,7 @@ function registerScreen(){
   }
   function loadRezkaStream(v,s,e){
    var operation=begin(),previous=post.series?'episodes':'translations';rezkaVoice=v;if(post.series)voice=v.id;loading('Отримуємо відео…');
-   request('rezka','stream',Object.assign({},v,{id:post.id,translator_id:v.id,title:post.title,translation:v.title,series:post.series,season:s,episode:e,favs:post.favs||''}),operation.signal).then(function(data){
+   request('rezka','stream',Object.assign({},v,{id:post.id,path:post.path,translator_id:v.id,title:post.title,translation:v.title,series:post.series,season:s,episode:e}),operation.signal).then(function(data){
     if(!current(operation.token))return;finish();state=previous;
     var items=(data.items||[]).filter(function(item){return media(item.url);});
     if(!items.length){notify('HDRezka: відтворюваних потоків не знайдено');return previous==='episodes'?drawEpisodes():drawRezkaVoices();}
@@ -879,9 +881,9 @@ function registerScreen(){
    if(!postVerified)return [];
    if(sourceId==='rezka'&&post){
     var translations=post.translations||[];
-    if(!post.series)return translations.map(function(v){return {provider:'rezka',translation:v.title,voice_id:v.id,title:post.title,needs_resolve:true,xot_rezka_voice:v,xot_post_id:post.id};});
+    if(!post.series)return translations.map(function(v){return {provider:'rezka',translation:v.title,voice_id:v.id,title:post.title,needs_resolve:true,xot_rezka_voice:v,xot_post_id:post.id,xot_rezka_path:post.path};});
     if(!rezkaVoice)return [];
-    return episodeList.flatMap(function(group){return group.episodes.map(function(n){return {provider:'rezka',translation:rezkaVoice.title,voice_id:rezkaVoice.id,title:post.title,season:group.season,episode:n,needs_resolve:true,xot_rezka_voice:rezkaVoice,xot_post_id:post.id};});});
+    return episodeList.flatMap(function(group){return group.episodes.map(function(n){return {provider:'rezka',translation:rezkaVoice.title,voice_id:rezkaVoice.id,title:post.title,season:group.season,episode:n,needs_resolve:true,xot_rezka_voice:rezkaVoice,xot_post_id:post.id,xot_rezka_path:post.path};});});
    }
    return streams.filter(function(item){return (source().kind!=='catalog'||matches(item,card))&&(!seriesCard(card)||item.season>0&&item.episode>0);});
   }
@@ -1163,11 +1165,11 @@ function registerScreen(){
    cancelPlayback();var task={controller:new AbortController(),token:serial,id:playbackSerial,timer:null};playbackRequest=task;
    function valid(){return current(task.token)&&playbackRequest===task&&playbackSerial===task.id;}
    function finishTask(){clearTimeout(task.timer);if(playbackRequest===task)playbackRequest=null;}
-   task.timer=setTimeout(function(){if(valid()){task.controller.abort();finishTask();fail(Error('request_timeout'));}},20000);
    var first=items[0],which=first.provider||sourceId,loading=items.some(function(item){return item.needs_resolve;});
+   task.timer=setTimeout(function(){if(valid()){task.controller.abort();finishTask();fail(Error('request_timeout'));}},which==='rezka'?120000:20000);
    var load;
    if(!loading)load=Promise.resolve({items:items});
-   else if(which==='rezka')load=request('rezka','stream',Object.assign({},first.xot_rezka_voice,{id:first.xot_post_id,translator_id:first.xot_rezka_voice.id,title:post.title,translation:first.translation,series:Boolean(first.episode),season:first.season,episode:first.episode,favs:post.favs||''}),task.controller.signal);
+   else if(which==='rezka')load=request('rezka','stream',Object.assign({},first.xot_rezka_voice,{id:first.xot_post_id,path:first.xot_rezka_path||post.path,translator_id:first.xot_rezka_voice.id,title:first.title||post.title,translation:first.translation,series:Boolean(first.episode),season:first.season,episode:first.episode}),task.controller.signal);
    else load=request(which,'stream',Object.assign({},first,{subtitles:undefined,subtitle:undefined}),task.controller.signal);
    load.then(function(data){
     if(!valid())return;
@@ -1184,7 +1186,7 @@ function registerScreen(){
   }
   function playlistFor(items,play){
    var first=items[0],inventory=streams;
-   if(first.provider==='rezka'&&first.episode&&rezkaVoice)inventory=episodeList.reduce(function(list,group){return list.concat(group.episodes.map(function(n){return {provider:'rezka',title:post.title,translation:rezkaVoice.title,season:group.season,episode:n,needs_resolve:true,xot_rezka_voice:rezkaVoice,xot_post_id:post.id};}));},[]);
+   if(first.provider==='rezka'&&first.episode&&rezkaVoice)inventory=episodeList.reduce(function(list,group){return list.concat(group.episodes.map(function(n){return {provider:'rezka',title:post.title,translation:rezkaVoice.title,voice_id:rezkaVoice.id,season:group.season,episode:n,needs_resolve:true,xot_rezka_voice:rezkaVoice,xot_post_id:post.id,xot_rezka_path:post.path};}));},[]);
    var groups=first.episode?episodeGroups(inventory.filter(function(item){return !futureEpisode(episodeInfo(item));}),first):[];
    if(!groups.length)return [play];
    return groups.map(function(group){

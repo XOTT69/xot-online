@@ -17,4 +17,4 @@ services:
       - key: XOT_SERVER_TOKEN
         generateValue: true
       - key: XOT_REZKA_ORIGIN
-        value: https://rezka.ag
+        value: https://rezka-ua.pub
