@@ -26,8 +26,8 @@
 1. Увійти у Vercel через GitHub, обрати особистий **Hobby**, не Pro trial.
    [Hobby](https://vercel.com/docs/plans/hobby) призначений для особистого
    некомерційного використання; ліміти застосовуються і до API.
-2. Відкрити [Deploy на Vercel](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2FXOTT69%2Fxot-online%2Ftree%2F4a49a5e01f2b28448298dc2e7d587638a2de5000&project-name=xot-rezka&repository-name=xot-rezka&env=XOT_SERVER_TOKEN&envDescription=Private%20adapter%20key%3A%20use%20a%20random%20value%20of%20at%20least%2032%20characters&envLink=https%3A%2F%2Fgithub.com%2FXOTT69%2Fxot-online%2Fblob%2Fcodex%2Fdirect-balancer-launch%2Fdocs%2Fvercel-rezka.md).
-   Посилання зафіксовано на перевіреному коміті `4a49a5e`, щоб Vercel не
+2. Відкрити [Deploy на Vercel](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2FXOTT69%2Fxot-online%2Ftree%2F0e3e4260ad572bf1e164157ae12dac2ca7908ef2&project-name=xot-rezka&repository-name=xot-rezka&env=XOT_SERVER_TOKEN&envDescription=Private%20adapter%20key%3A%20use%20a%20random%20value%20of%20at%20least%2032%20characters&envLink=https%3A%2F%2Fgithub.com%2FXOTT69%2Fxot-online%2Fblob%2Fcodex%2Fdirect-balancer-launch%2Fdocs%2Fvercel-rezka.md).
+   Посилання зафіксовано на перевіреному коміті `0e3e426`, щоб Vercel не
    розбирав `codex/direct-balancer-launch` як гілку `codex` і папку
    `direct-balancer-launch`. Сторінку нового посилання перевірено до входу;
    створення проєкту в акаунті цим не підтверджується.
