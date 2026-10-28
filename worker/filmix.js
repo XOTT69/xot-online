@@ -23,15 +23,28 @@ function safeURL(api,path,device,token,extra={}){
  for(const [key,val] of Object.entries(extra))url.searchParams.set(key,val);
  return url;
 }
-async function call(api,path,device,token,extra){
+async function call(api,path,device,token,extra,anonymous=false){
  const url=safeURL(api,path,device,token,extra);
- const res=await fetch(url,{method:'GET',headers:{accept:'application/json'},signal:AbortSignal.timeout(8500),redirect:'error'});
+ let res,transport='https';
+ try{
+  res=await fetch(url,{method:'GET',headers:{accept:'application/json'},signal:AbortSignal.timeout(6500),redirect:'manual'});
+  if(res.status===525||res.status===526)throw Error('filmix_http_'+res.status);
+ }catch(error){
+  if(!anonymous||token)throw error;
+  // The public API currently has a broken TLS certificate. Only anonymous
+  // metadata requests may fall back to HTTP, using a fresh, unlinked device ID.
+  // Pairing, profiles and every request carrying a personal token stay on HTTPS.
+  url.protocol='http:';
+  url.searchParams.set('user_dev_id',crypto.randomUUID().replace(/-/g,''));
+  res=await fetch(url,{method:'GET',headers:{accept:'application/json'},signal:AbortSignal.timeout(6500),redirect:'manual'});
+  transport='anonymous_http';
+ }
  if(!res.ok)throw new Error('filmix_http_'+res.status);
  const raw=await res.text();
  if(raw.length>1024*1024)throw new Error('filmix_response_too_large');
  let data;try{data=JSON.parse(raw);}catch(e){throw new Error('filmix_invalid_json');}
  if(data&&data.status==='error')throw new Error('filmix_api_error');
- return data;
+ return {data,transport};
 }
 function qualityChoices(url,cap){
  const value=limit(url,3000);
@@ -43,30 +56,43 @@ function qualityChoices(url,cap){
   return mediaURL.test(concrete)?{quality:q?q+'p':'auto',url:concrete}:null;
  }).filter(Boolean);
 }
-export function flattenFilmixPost(post,cap=480){
- const out=[],links=post&&post.player_links||{},name=limit(post.title,200)||'Відео';
- const add=(voice,link,season,episode)=>{
-  for(const choice of qualityChoices(link,cap))out.push({title:name,source:'Filmix',provider:'filmix',translation:limit(voice,90)||'Оригінал',season:season||null,episode:episode||null,...choice});
+export function filmixInventory(post,cap=480){
+ const items=[],unavailable=[],voices=[],voiceMap=new Map();
+ const links=post&&post.player_links||{},name=limit(post&&post.title,200)||'Відео';
+ const add=(rawVoice,link,season,episode)=>{
+  const label=String(rawVoice||'Оригінал').trim()||'Оригінал';
+  let voice=voiceMap.get(label);
+  if(!voice){voice={id:'filmix_voice_'+voices.length,translation:limit(label,240),available:false};voiceMap.set(label,voice);voices.push(voice);}
+  const identity={title:name,source:'Filmix',provider:'filmix',translation:voice.translation,voice_id:voice.id,season:season||null,episode:episode||null};
+  const choices=qualityChoices(link,cap);
+  for(const choice of choices)items.push({...identity,...choice});
+  if(choices.length){voice.available=true;return;}
+  const advertised=qualityChoices(link,Infinity).map(choice=>choice.quality);
+  unavailable.push({...identity,available_qualities:advertised,reason:advertised.length?'quality_limit':'no_secure_stream'});
  };
  const movie=Array.isArray(links.movie)?links.movie:[];
- for(const v of movie)add(v.translation,v.link);
+ for(const entry of movie)if(entry&&typeof entry==='object')add(entry.translation,entry.link);
  const seasons=links.playlist&&!Array.isArray(links.playlist)?links.playlist:{};
- for(const [number,voices] of Object.entries(seasons)){
+ for(const [number,translations] of Object.entries(seasons)){
   const season=Number(number)||0;
-  if(!season||!voices||typeof voices!=='object')continue;
-  for(const [voice,raw] of Object.entries(voices)){
+  if(!season||!translations||typeof translations!=='object')continue;
+  for(const [voice,raw] of Object.entries(translations)){
    const episodes=Array.isArray(raw)?raw.map((entry,i)=>[i+1,entry]):
     Array.isArray(raw&&raw.episodes)?raw.episodes.map((entry,i)=>[i+1,entry]):
     raw&&typeof raw==='object'?Object.entries(raw).sort((a,b)=>Number(a[0])-Number(b[0])):[];
-   episodes.forEach(([key,item])=>{
-    const link=typeof item==='string'?item:item&&item.link;
-    const num=(item&&Number(item.number||item.episode))||Number(key);
-    if(Number.isInteger(num)&&num>0)add(voice,link,season,num);
-   });
+   for(const [key,entry] of episodes){
+    const link=typeof entry==='string'?entry:entry&&entry.link;
+    const number=(entry&&Number(entry.number||entry.episode))||Number(key);
+    if(Number.isInteger(number)&&number>0)add(voice,link,season,number);
+   }
   }
  }
- return out.slice(0,350);
+ // Preserve every translation and episode; the bounded upstream response is the
+ // size limit. Cutting the flat list here used to drop later voices in series.
+ return {items,unavailable,voices,quality_cap:cap};
 }
+export function flattenFilmixPost(post,cap=480){return filmixInventory(post,cap).items;}
+
 function err(e){
  const str=String(e&&e.message||'unavailable');
  if(/^filmix_(?:http_\d{3}|invalid_json|response_too_large|api_error|https_required)$/.test(str))return str;
@@ -95,8 +121,8 @@ export async function handleFilmix(request,env){
   // Pairing uses a stable device ID but never the preliminary or saved token
   // as an auth credential. The upstream issues a new permanent token only
   // after the user enters the code on Filmix's account page.
-  const response=await call(env&&env.FILMIX_API_BASE,route,device,['pair','confirm','probe'].includes(action)?'':token,params);
-  if(action==='probe')return reply({status:response&&typeof response==='object'?'reachable':'invalid_response'});
+  const {data:response,transport}=await call(env&&env.FILMIX_API_BASE,route,device,['pair','confirm','probe'].includes(action)?'':token,params,['probe','search','post'].includes(action));
+  if(action==='probe')return reply({status:response&&typeof response==='object'?'reachable':'invalid_response',transport});
   if(action==='pair'){
    const userCode=limit(response&&response.user_code,8),temp=limit(response&&response.user_dev_token,256);
    if(!userCode)return reply({error:'filmix_pairing_response_unrecognized'},502);
@@ -110,19 +136,22 @@ export async function handleFilmix(request,env){
   }
   if(action==='search'){
    const found=Array.isArray(response)?response:Array.isArray(response&&response.results)?response.results:[];
-   return reply({results:found.slice(0,45).filter(x=>x&&Number.isInteger(Number(x.id))).map(x=>({id:x.id,title:limit(x.title,200),original_title:limit(x.original_title,200),year:Number(x.year)||null,series:Number(x.section)===7}))});
+   return reply({transport,results:found.slice(0,45).filter(x=>x&&Number.isInteger(Number(x.id))).map(x=>({id:x.id,title:limit(x.title,200),original_title:limit(x.original_title,200),year:Number(x.year)||null,series:Number(x.section)===7}))});
   }
   if(action==='profile')return reply({linked:Boolean(token),pro:activePlan(response&&response.is_pro),pro_plus:activePlan(response&&response.is_pro_plus)});
   let cap=480;
   if(token){
    cap=480;
    try{
-    const profile=await call(env&&env.FILMIX_API_BASE,'user_profile',device,token,{});
+    const {data:profile}=await call(env&&env.FILMIX_API_BASE,'user_profile',device,token,{});
     if(activePlan(profile&&profile.is_pro_plus))cap=2160;
     else if(activePlan(profile&&profile.is_pro))cap=1080;
     else if(profile&&profile.login)cap=720;
    }catch(e){/* A valid token without Pro verification never raises the quality cap. */}
   }
-  return reply({title:limit(response&&response.title,200),items:flattenFilmixPost(response,cap)});
- }catch(e){return reply({error:err(e)},502);}
+  return reply({transport,title:limit(response&&response.title,200),...filmixInventory(response,cap)});
+ }catch(e){
+  if(env?.XOT_DEBUG==='true')console.warn('[XOT Filmix]',action,String(e?.message||'unknown').replace(/https?:\/\/\S+/g,'[upstream]').slice(0,180));
+  return reply({error:err(e)},502);
+ }
 }

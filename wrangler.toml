@@ -2,6 +2,10 @@ name = "xot-online"
 main = "worker/index.js"
 compatibility_date = "2026-10-25"
 
+# The optional Rezka backend remains disconnected until device playback is
+# verified and transferring its API credential is explicitly authorized.
+
 [assets]
 directory = "./public"
 binding = "ASSETS"
+run_worker_first = ["/m.js", "/online.js"]

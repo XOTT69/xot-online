@@ -1,4 +1,11 @@
 import {handleFilmix} from './filmix.js';
+import {handleRezka} from './rezka.js';
+import {handleAnilibria} from './anilibria.js';
+import {handleEneyida} from './eneyida.js';
+import {handleUkrainian} from './ukrainian.js';
+import {handleUFDub} from './ufdub.js';
+import {handleSerialno} from './serialno.js';
+import {forwardNative,forwardRezka} from './backend.js';
 import {providers,normalize} from './providers.js';
 import {buildQueries,matchScore} from './matching.js';
 const headers={'content-type':'application/json; charset=utf-8','cache-control':'no-store','access-control-allow-origin':'*','x-content-type-options':'nosniff'};
@@ -14,10 +21,34 @@ function getQuery(url){return {title:(url.searchParams.get('title')||'').trim(),
 function check(q){return ((q.title && q.title.length<=200)||/^\d{1,12}$/.test(q.tmdb_id))&&(!q.year||/^\d{4}$/.test(q.year));}
 export default {async fetch(request,env){
  const url=new URL(request.url);
+ if(url.pathname==='/api/rezka'&&request.method==='POST'&&env.XOT_REZKA_BACKEND_URL){
+  try{return await forwardRezka(request,env);}catch{return json({error:'backend_unavailable'},502);}
+ }
+ if(['/api/filmix','/api/rezka'].includes(url.pathname)&&request.method==='POST'&&env.XOT_BACKEND_URL){
+  try{return await forwardNative(request,env);}catch{return json({error:'backend_unavailable'},502);}
+ }
  if(url.pathname==='/api/filmix')return handleFilmix(request,env);
+ if(url.pathname==='/api/rezka')return handleRezka(request,env);
+ if(url.pathname==='/api/anilibria')return handleAnilibria(request);
+ if(url.pathname==='/api/eneyida')return handleEneyida(request);
+ if(url.pathname==='/api/kinovezha')return handleUkrainian(request,'kinovezha');
+ if(url.pathname==='/api/uaserials')return handleUkrainian(request,'uaserials');
+ if(url.pathname==='/api/ufdub')return handleUFDub(request);
+ if(url.pathname==='/api/serialno')return handleSerialno(request);
  if(request.method==='OPTIONS')return new Response(null,{status:204,headers:{...headers,'access-control-allow-methods':'GET, OPTIONS'}});
+ if(url.pathname==='/m.js'||url.pathname==='/online.js'){
+  if(!['GET','HEAD'].includes(request.method))return json({error:'method_not_allowed'},405);
+  if(!env.ASSETS)return json({error:'assets_not_configured'},503);
+  const asset=await env.ASSETS.fetch(request);
+  const response=new Response(request.method==='HEAD'?null:asset.body,asset);
+  response.headers.set('access-control-allow-origin','*');
+  response.headers.set('cache-control','no-store');
+  response.headers.set('x-content-type-options','nosniff');
+  if(asset.ok)response.headers.set('content-type','application/javascript; charset=utf-8');
+  return response;
+ }
  if(request.method!=='GET')return json({error:'method_not_allowed'},405);
- if(url.pathname==='/api/health')return json({ok:true,service:'xot-online',provider_count:providers.filter(p=>!p.enabled||p.enabled(env)).length,features:{filmix_device_flow:true}});
+ if(url.pathname==='/api/health')return json({ok:true,service:'xot-online',provider_count:providers.filter(p=>!p.enabled||p.enabled(env)).length,native_balancers:['filmix','eneyida','kinovezha','uaserials','ufdub','serialno','rezka','anilibria'],features:{filmix_device_flow:true,native_balancers:true}});
  if(url.pathname==='/api/providers')return json({providers:providers.map(p=>({id:p.id,name:p.name,enabled:!p.enabled||p.enabled(env)}))});
  if(url.pathname==='/api/query-plan'||url.pathname==='/api/search'){
   const query=getQuery(url);if(!check(query))return json({error:'invalid_query'},400);

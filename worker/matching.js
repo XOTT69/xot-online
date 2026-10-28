@@ -22,3 +22,13 @@ export function buildQueries(input) {
  for(const name of all){const key=normalizeTitle(name);if(key&&!unique.has(key))unique.set(key,name);}
  return [...unique.values()].slice(0,10);
 }
+
+// A release year or a title fragment alone cannot identify the selected movie.
+export function sameMovie(candidate, query){
+ const cy=Number(candidate.year),qy=Number(query.year);
+ if(cy&&qy&&cy!==qy)return false;
+ if(query.series!==undefined&&candidate.series!==undefined&&Boolean(query.series)!==Boolean(candidate.series))return false;
+ if(query.imdb_id&&candidate.imdb_id)return query.imdb_id===candidate.imdb_id;
+ const expected=buildQueries(query).map(normalizeTitle);
+ return [candidate.title,candidate.original_title,...(candidate.alternative_titles||[])].filter(v=>typeof v==='string').map(normalizeTitle).some(value=>value&&expected.includes(value));
+}

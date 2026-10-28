@@ -1,0 +1,4 @@
+{$XOT_API_HOST} {
+  encode gzip
+  reverse_proxy xot:8788
+}
