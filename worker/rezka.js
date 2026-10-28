@@ -136,8 +136,13 @@ export function parseRezkaStreams(value){
    try{
     const u=new URL(raw.trim());
     if(u.protocol!=='https:'||u.username||u.password||!/(?:\.mp4|\.m3u8|\.mpd)(?:$|:hls:)/i.test(u.pathname))continue;
-    // Keep each quality once, preferring the first HTTPS variant returned by Rezka.
-    if(!items.some(x=>x.quality===quality))items.push({quality,url:u.toString()});
+    // The player's "or" entries are real CDN alternatives. Retain them instead
+    // of discarding a working address when the first CDN is unavailable.
+    const existing=items.find(x=>x.quality===quality),url=u.toString();
+    if(!existing)items.push({quality,url});
+    else if(existing.url!==url&&!(existing.alternatives||[]).includes(url)){
+     if(!existing.alternatives)existing.alternatives=[];existing.alternatives.push(url);
+    }
    }catch{}
   }
  }

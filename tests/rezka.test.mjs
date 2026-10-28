@@ -15,6 +15,10 @@ test('Rezka streams keep HTTPS quality variants and reject embed/script/plain HT
  assert.deepEqual(rows.map(x=>x.quality),['1080p','720p']);assert.ok(rows.every(x=>x.url.startsWith('https:')));
 });
 test('Rezka decodes public base64 player format with known padding markers',()=>{const raw='[720p]https://cdn.example/video.m3u8';const encoded='#h'+btoa(raw)+'//_//'+btoa('$$!!@$$@^!@#$$@');assert.equal(parseRezkaStreams(encoded)[0].url,'https://cdn.example/video.m3u8');});
+test('Published CDN alternatives survive parsing without duplicate quality rows',()=>{
+ const items=parseRezkaStreams('[720p]https://first.example/video.m3u8 or https://second.example/video.m3u8 or https://second.example/video.m3u8,[1080p]https://first.example/hd.m3u8');
+ assert.equal(items.length,2);assert.equal(items[0].url,'https://first.example/video.m3u8');assert.deepEqual(items[0].alternatives,['https://second.example/video.m3u8']);
+});
 test('unknown stream encodings report an actionable error',()=>{assert.throws(()=>parseRezkaStreams('#9%%%'),/rezka_unsupported_stream_format/);});
 test('Rezka rejects invalid IDs, paths and server origins before fetch',async()=>{
  assert.equal((await handleRezka(req({action:'stream',id:'bad',translator_id:7}),{})).status,400);
