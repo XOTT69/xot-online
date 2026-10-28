@@ -33,6 +33,10 @@ jobs:
           node --check worker/backend.js
           node --check worker/index.js
           node --check server/index.mjs
+          node --check server/vercel-rezka.mjs
+          node --check api/rezka.js
+          node --check vercel-public/check.js
+          node --check vercel-public/diagnostics.js
           node --check scripts/smoke-assets.mjs
           node --check scripts/smoke-features.mjs
           node --check scripts/smoke-backup.mjs
