@@ -5,7 +5,7 @@ services:
     runtime: node
     plan: free
     region: frankfurt
-    autoDeployTrigger: "off"
+    autoDeployTrigger: checksPass
     buildCommand: npm ci --omit=dev --ignore-scripts --no-audit --no-fund
     startCommand: npm run server:rezka
     healthCheckPath: /healthz

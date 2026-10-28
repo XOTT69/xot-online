@@ -13,7 +13,7 @@ test('Vercel entry exports a Web Standard handler and health does not contact th
  assert.equal(typeof entry.fetch,'function');let calls=0;
  const handle=createVercelRezka({env:{XOT_SERVER_TOKEN:token},fetcher:async()=>{calls++;throw Error('unexpected');}});
  const response=await handle(new Request('https://test.vercel.app/api/rezka'));
- assert.deepEqual(await response.json(),{ok:true,service:'xot-rezka',configured:true,upstream_diagnostics:true,guest_sessions:true});assert.equal(calls,0);
+ assert.deepEqual(await response.json(),{ok:true,service:'xot-rezka',configured:true,upstream_diagnostics:true,guest_sessions:true,diagnostic_routes:true});assert.equal(calls,0);
 });
 test('Vercel fails closed without configuration or matching authorization before any source fetch',async()=>{
  let calls=0;const fetcher=async()=>{calls++;throw Error('unexpected');};
@@ -58,6 +58,20 @@ test('Authenticated video diagnostics preserve failure status and redact URLs an
  assert.ok(data.diagnostics[0].message.includes('[URL]'));assert.ok(!JSON.stringify(data).includes(token));assert.ok(!JSON.stringify(data).includes('example.com'));
  const unauthorized=req({action:'stream',id:123,translator_id:42},'wrong');unauthorized.headers.set('x-xot-diagnostics','1');
  assert.deepEqual(await (await handle(unauthorized)).json(),{error:'unauthorized'});
+});
+
+test('Owner diagnostics can select only fixed source addresses and an identified compatibility client',async()=>{
+ let seen;
+ const handle=createVercelRezka({env:{XOT_SERVER_TOKEN:token},fetcher:async(url,options)=>{seen={origin:new URL(url).origin,headers:options.headers};return new Response(html);}});
+ const request=req({action:'post',path});request.headers.set('x-xot-diagnostics','1');request.headers.set('x-xot-rezka-route','ua');request.headers.set('x-xot-client','compatible');
+ const response=await handle(request);assert.equal(response.status,200);assert.equal(seen.origin,'https://rezka-ua.pub');assert.match(seen.headers['user-agent'],/compatible; XOT-Lampa/);assert.ok(!JSON.stringify(seen).includes(token));
+ const data=await response.json();assert.equal(data.diagnostic_route,'ua');assert.equal(data.diagnostic_client,'compatible');
+});
+test('Diagnostic route overrides require authorization and cannot be arbitrary origins or ordinary requests',async()=>{
+ let calls=0;const handle=createVercelRezka({env:{XOT_SERVER_TOKEN:token},fetcher:async()=>{calls++;return new Response(html);}});
+ const ordinary=req({action:'post',path});ordinary.headers.set('x-xot-rezka-route','home');assert.equal((await handle(ordinary)).status,400);
+ const untrusted=req({action:'post',path});untrusted.headers.set('x-xot-diagnostics','1');untrusted.headers.set('x-xot-rezka-route','https://untrusted.example');assert.equal((await handle(untrusted)).status,400);
+ const unauth=req({action:'post',path},'wrong');unauth.headers.set('x-xot-diagnostics','1');unauth.headers.set('x-xot-rezka-route','home');assert.equal((await handle(unauth)).status,401);assert.equal(calls,0);
 });
 
 const translations=[{id:'42',title:'Українська',is_ads:'1'},{id:'7',title:'Original'}];

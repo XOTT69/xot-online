@@ -14,7 +14,7 @@ const reply=(body,status=200)=>new Response(JSON.stringify(body),{status,headers
 function trustedOrigin(value){
  const url=new URL(value);
  // Host comes only from deployment configuration; no client-supplied upstreams.
- if(url.protocol!=='https:'||url.username||url.password||url.port||!/(?:^|\.)(?:hdrezka\.(?:ag|tv|me|cm|la|ink|buzz|loan|rest|center|fyi|run|today|win|tips|solutions)|hdrezka-home\.tv|rezka\.ag|rezka-ua\.net)$/.test(url.hostname))throw Error('rezka_invalid_origin');
+ if(url.protocol!=='https:'||url.username||url.password||url.port||!/(?:^|\.)(?:hdrezka\.(?:ag|tv|me|cm|la|ink|buzz|loan|rest|center|fyi|run|today|win|tips|solutions)|hdrezka-home\.tv|rezka\.ag|rezka-ua\.(?:net|tv|pub))$/.test(url.hostname))throw Error('rezka_invalid_origin');
  return url.origin;
 }
 function originOf(env){return trustedOrigin(env?.XOT_REZKA_ORIGIN||DEFAULT_ORIGIN);}
