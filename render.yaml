@@ -4,10 +4,10 @@ services:
     name: xot-rezka-test
     runtime: node
     plan: free
-    branch: codex/direct-balancer-launch
+    region: frankfurt
     autoDeployTrigger: "off"
     buildCommand: npm ci --omit=dev --ignore-scripts --no-audit --no-fund
-    startCommand: npm run server:start
+    startCommand: npm run server:rezka
     healthCheckPath: /healthz
     envVars:
       - key: NODE_VERSION

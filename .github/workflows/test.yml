@@ -33,6 +33,7 @@ jobs:
           node --check worker/backend.js
           node --check worker/index.js
           node --check server/index.mjs
+          node --check server/rezka-host.mjs
           node --check server/vercel-rezka.mjs
           node --check api/rezka.js
           node --check vercel-public/check.js

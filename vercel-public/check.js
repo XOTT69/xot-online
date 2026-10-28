@@ -1,8 +1,9 @@
 import {runRezkaDiagnostics,diagnosticCode} from './diagnostics.js';
 
 const $=id=>document.getElementById(id),rows=[];
+const hosting=location.hostname.endsWith('.onrender.com')?'Render':location.hostname.endsWith('.vercel.app')?'Vercel':'Node';
 let controller;
-const messages={unauthorized:'Ключ не збігається з XOT_SERVER_TOKEN у Vercel.',backend_not_configured:'Додай XOT_SERVER_TOKEN у Vercel та виконай Redeploy.',rezka_access_denied:'Rezka обмежує доступ із цього сервера.',rezka_auth_required:'Джерело вимагає вхід або доступ до вибраного озвучення.',rezka_session_expired:'Rezka відхилила гостьову сесію. Спробуй повторити перевірку.',rezka_session_required:'Сторінка не повернула гостьовий токен плеєра.',rezka_stream_unavailable:'Rezka відповіла, але не повернула відеопосилання.',rezka_timeout:'Джерело не відповіло вчасно.'};
+const messages={unauthorized:'Ключ не збігається з XOT_SERVER_TOKEN сервера.',backend_not_configured:'Додай XOT_SERVER_TOKEN у налаштування сервера та виконай повторне розгортання.',rezka_access_denied:'Rezka обмежує доступ із цього сервера.',rezka_auth_required:'Джерело вимагає вхід або доступ до вибраного озвучення.',rezka_session_expired:'Rezka відхилила гостьову сесію. Спробуй повторити перевірку.',rezka_session_required:'Сторінка не повернула гостьовий токен плеєра.',rezka_stream_unavailable:'Rezka відповіла, але не повернула відеопосилання.',rezka_timeout:'Джерело не відповіло вчасно.'};
 const stages={search:'пошук',post:'озвучення',episodes:'список серій',stream:'відеопосилання'};
 function render(row){
  rows.push(row);const item=document.createElement('li');
@@ -32,6 +33,6 @@ $('check-form').addEventListener('submit',async event=>{
 });
 $('cancel').addEventListener('click',()=>controller?.abort());
 $('copy').addEventListener('click',async()=>{
- const report=['ХОТ · Rezka / Vercel',location.origin,...rows.map(row=>row.label+': '+(row.ok?'OK — ':'Помилка — ')+row.detail+(stages[row.stage]?' ['+stages[row.stage]+']':'')),'Це перевірка відеопосилань, не відтворення.'].join('\n');
+ const report=['ХОТ · Rezka / '+hosting,location.origin,...rows.map(row=>row.label+': '+(row.ok?'OK — ':'Помилка — ')+row.detail+(stages[row.stage]?' ['+stages[row.stage]+']':'')),'Це перевірка відеопосилань, не відтворення.'].join('\n');
  try{await navigator.clipboard.writeText(report);$('status').textContent='Звіт скопійовано.';}catch{$('status').textContent='Не вдалося скопіювати звіт. Результати залишилися на сторінці.';}
 });
