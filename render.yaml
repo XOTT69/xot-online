@@ -1,0 +1,20 @@
+# Diagnostic candidate only. Do not connect production before testing source access.
+services:
+  - type: web
+    name: xot-rezka-test
+    runtime: node
+    plan: free
+    branch: codex/direct-balancer-launch
+    autoDeployTrigger: "off"
+    buildCommand: npm ci --omit=dev --ignore-scripts --no-audit --no-fund
+    startCommand: npm run server:start
+    healthCheckPath: /healthz
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: NODE_ENV
+        value: production
+      - key: XOT_SERVER_TOKEN
+        generateValue: true
+      - key: XOT_REZKA_ORIGIN
+        value: https://rezka.ag
