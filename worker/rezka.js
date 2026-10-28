@@ -23,17 +23,35 @@ function pathOf(value){
  if(!/^\/(?:films|series|animation|cartoons)\/[a-z0-9_/-]+\.html$/i.test(path)||path.includes('..')||path.length>500)throw Error('rezka_invalid_path');
  return path;
 }
-async function upstream(origin,path,form,redirects=0,fetcher=fetch){
+function rememberCookies(response,url,session){
+ if(!session)return;
+ const values=response.headers.getSetCookie?.()||(response.headers.get('set-cookie')||'').split(/,(?=\s*[\w-]+=)/);
+ if(!session.cookies.has(url.origin))session.cookies.set(url.origin,new Map());
+ const jar=session.cookies.get(url.origin);
+ for(const value of values){
+  const [pair,...attrs]=value.split(';'),match=pair.trim().match(/^([\w-]+)=([^\r\n;]*)$/);if(!match)continue;
+  const key=match[1],options=new Map(attrs.map(attr=>{const at=attr.indexOf('=');return [attr.slice(0,at<0?undefined:at).trim().toLowerCase(),at<0?'':attr.slice(at+1).trim()];}));
+  if(!match[2]||Number(options.get('max-age'))<=0&&options.has('max-age')||options.has('expires')&&Date.parse(options.get('expires'))<Date.now()){jar.delete(key);continue;}
+  jar.set(key,{value:match[2],path:options.get('path')||url.pathname.slice(0,url.pathname.lastIndexOf('/')+1)});
+ }
+}
+async function upstream(origin,path,form,redirects=0,fetcher=fetch,session){
  const url=new URL(path,origin);
  if(url.origin!==origin)throw Error('rezka_invalid_path');
  const headers={accept:form?'application/json':'text/html','user-agent':'XOT-Lampa/0.3.16','referer':origin+'/'};
+ if(session){
+  const cookies=[...(session.cookies.get(url.origin)||new Map())].filter(([,cookie])=>url.pathname.startsWith(cookie.path)).map(([key,cookie])=>key+'='+cookie.value);
+  if(cookies.length)headers.cookie=cookies.join('; ');
+  if(session.referer&&new URL(session.referer).origin===origin)headers.referer=session.referer;
+ }
  if(form){headers['content-type']='application/x-www-form-urlencoded';headers['x-requested-with']='XMLHttpRequest';headers.origin=origin;}
  const response=await fetcher(url,{method:form?'POST':'GET',headers,body:form?new URLSearchParams(form).toString():undefined,redirect:'manual',signal:AbortSignal.timeout(8000)});
+ rememberCookies(response,url,session);
  if(response.status>=300&&response.status<400){
   const next=new URL(response.headers.get('location')||origin,url);
   try{trustedOrigin(next);}catch{throw Error('rezka_mirror_redirect');}
   if(redirects>=3)throw Error('rezka_mirror_redirect');
-  return upstream(next.origin,next.pathname+next.search,form,redirects+1,fetcher);
+  return upstream(next.origin,next.pathname+next.search,form,redirects+1,fetcher,session);
  }
  if(response.status===403||response.status===429)throw Error('rezka_access_denied');
  if(!response.ok)throw Error('rezka_http_'+response.status);
@@ -45,6 +63,7 @@ async function upstream(origin,path,form,redirects=0,fetcher=fetch){
  if(!data||data.success===false){
   const message=String(data?.message||data?.error||'');
   if(/premium|премиум|преміум|авториз|войдите|войти в аккаунт|увійдіть/i.test(message))throw Error('rezka_auth_required');
+  if(/сесси[ия]|сесі[яї]|session/i.test(message))throw Error('rezka_session_expired');
   throw Error('rezka_stream_unavailable');
  }
  return data;
@@ -128,7 +147,7 @@ export function parseRezkaStreams(value){
 }
 function safeError(error){
  const code=String(error?.message||'');
- if(/^rezka_(?:invalid_origin|invalid_path|mirror_redirect|access_denied|auth_required|movie_mismatch|http_\d{3}|response_too_large|invalid_response|stream_unavailable|player_not_found|translations_not_found|unsupported_stream_format)$/.test(code))return code;
+ if(/^rezka_(?:invalid_origin|invalid_path|mirror_redirect|access_denied|auth_required|session_expired|session_required|movie_mismatch|http_\d{3}|response_too_large|invalid_response|stream_unavailable|player_not_found|translations_not_found|unsupported_stream_format)$/.test(code))return code;
  return /abort|timeout/i.test(code)?'rezka_timeout':'rezka_unavailable';
 }
 export async function handleRezka(request,env={},fetcher=fetch){
@@ -146,9 +165,13 @@ export async function handleRezka(request,env={},fetcher=fetch){
  if(['episodes','stream'].includes(action)&&(!ID.test(String(input.id||''))||!ID.test(String(input.translator_id||''))))return reply({error:'invalid_id'},400);
  if(action==='stream'&&input.series&&(!ID.test(String(input.season||''))||!ID.test(String(input.episode||''))))return reply({error:'invalid_episode'},400);
  if(action==='post'){try{pathOf(input.path);}catch{return reply({error:'rezka_invalid_path'},400);}}
+ if(['episodes','stream'].includes(action)&&input.path!==undefined){
+  try{pathOf(input.path);}catch{return reply({error:'rezka_invalid_path'},400);}
+  if(input.path.match(/\/(\d+)-[^/]+\.html$/)?.[1]!==String(input.id))return reply({error:'rezka_movie_mismatch'},400);
+ }
  try{
-  const origin=originOf(env);
-  const load=(path,form)=>upstream(origin,path,form,0,fetcher),query=input.movie&&{title:input.movie.titles[0],alternative_titles:input.movie.titles.slice(1),year:input.movie.year,series:input.movie.series};
+  const origin=originOf(env),session={cookies:new Map(),referer:null};let targetOrigin=origin;
+  const load=(path,form)=>upstream(targetOrigin,path,form,0,fetcher,session),query=input.movie&&{title:input.movie.titles[0],alternative_titles:input.movie.titles.slice(1),year:input.movie.year,series:input.movie.series};
   if(action==='probe'){await load('/');return reply({status:'reachable',origin});}
   if(action==='search'){
    const params=new URLSearchParams({do:'search',subaction:'search',q:limit(input.title)});
@@ -171,9 +194,21 @@ export async function handleRezka(request,env={},fetcher=fetch){
    return reply(post);
   }
   const form={id:String(input.id),translator_id:String(input.translator_id),action:action==='episodes'?'get_episodes':input.series?'get_stream':'get_movie'};
+  if(input.path){
+   // Start a fresh anonymous page session inside this invocation. The source's
+   // own player sends ctrl_favs with the corresponding guest cookies. Nothing
+   // is shared between users or returned to the browser.
+   const page=await load(input.path),post=parseRezkaPost(page.body,input.path);
+   if(post.id!==String(input.id)||post.series!==(action==='episodes'||Boolean(input.series)))throw Error('rezka_movie_mismatch');
+   if(!post.translations.some(voice=>voice.id===String(input.translator_id)))throw Error('rezka_translations_not_found');
+   const root=parseDocument(page.body),favs=first(root,node=>node.attribs?.id==='ctrl_favs')?.attribs?.value;
+   if(typeof favs!=='string'||!favs||favs.length>512)throw Error('rezka_session_required');
+   targetOrigin=page.origin;session.referer=page.origin+input.path;form.favs=favs;
+  }
   if(action==='stream'&&input.series){form.season=String(input.season);form.episode=String(input.episode);}
   for(const key of ['is_camrip','is_ads','is_director'])form[key]=input[key]==='1'?'1':'0';
   const data=await load('/ajax/get_cdn_series/?t='+Date.now(),form);
+  if(data.premium_content===1||data.premium_content==='1')throw Error('rezka_auth_required');
   if(action==='episodes')return reply({seasons:parseRezkaEpisodes(String(data.episodes||''))});
   const items=parseRezkaStreams(data.url);if(!items.length)throw Error('rezka_stream_unavailable');
   return reply({items:items.map(item=>({title:limit(input.title)||'Відео',provider:'rezka',source:'HDRezka',translation:limit(input.translation,120),season:input.series?Number(input.season):null,episode:input.series?Number(input.episode):null,...item}))});

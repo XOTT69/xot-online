@@ -76,3 +76,52 @@ test('Protected or empty playback responses never report successful playable res
  const denied=await handleRezka(req({action:'stream',id:123,translator_id:42}),{},async()=>Response.json({success:false,message:'Для просмотра необходимо войти в аккаунт Premium'}));assert.equal((await denied.json()).error,'rezka_auth_required');
  const empty=await handleRezka(req({action:'stream',id:123,translator_id:42}),{},async()=>Response.json({success:true,url:''}));assert.equal((await empty.json()).error,'rezka_stream_unavailable');
 });
+
+test('Fresh anonymous playback uses the page nonce, its cookies and exact page referer',async()=>{
+ let calls=0;
+ const response=await handleRezka(req({action:'stream',path,id:123,translator_id:42,favs:'untrusted-client-nonce'}),{},async(url,options)=>{
+  calls++;
+  if(options.method==='GET')return new Response(film+'<input id="ctrl_favs" value="fresh-page-nonce">',{headers:{'set-cookie':'PHPSESSID=guest-session; Path=/; HttpOnly; Secure'}});
+  const form=new URLSearchParams(options.body);
+  assert.equal(form.get('favs'),'fresh-page-nonce');assert.equal(form.get('translator_id'),'42');assert.equal(options.headers.cookie,'PHPSESSID=guest-session');assert.equal(options.headers.referer,'https://rezka.ag'+path);
+  return Response.json({success:true,url:'[720p]https://cdn.example/film.m3u8'});
+ });
+ assert.equal(response.status,200);assert.equal(calls,2);const data=await response.json();assert.equal(data.items[0].quality,'720p');assert.ok(!JSON.stringify(data).includes('guest-session'));assert.ok(!JSON.stringify(data).includes('fresh-page-nonce'));
+});
+test('Guest sessions are isolated between simultaneous requests',async()=>{
+ const seen=[];
+ const fetcher=async(url,options)=>{
+  if(options.method==='GET'){
+   const id=new URL(url).pathname.includes('456-')?'456':'123';await Promise.resolve();
+   return new Response(film.replaceAll('123',id)+'<input id="ctrl_favs" value="nonce-'+id+'">',{headers:{'set-cookie':'PHPSESSID=guest-'+id+'; Path=/'}});
+  }
+  const form=new URLSearchParams(options.body);seen.push(form.get('id'));
+  assert.equal(options.headers.cookie,'PHPSESSID=guest-'+form.get('id'));assert.equal(form.get('favs'),'nonce-'+form.get('id'));
+  return Response.json({success:true,url:'[720p]https://cdn.example/video.m3u8'});
+ };
+ const responses=await Promise.all(['123','456'].map(id=>handleRezka(req({action:'stream',path:path.replace('123',id),id,translator_id:42}),{},fetcher)));
+ assert.ok(responses.every(response=>response.status===200));assert.deepEqual(seen.sort(),['123','456']);
+});
+test('A validated source redirect keeps guest cookies on their own origin',async()=>{
+ let calls=0;
+ const response=await handleRezka(req({action:'stream',path,id:123,translator_id:42}),{},async(url,options)=>{
+  calls++;
+  if(new URL(url).origin==='https://rezka.ag')return new Response('',{status:302,headers:{location:'https://hdrezka-home.tv'+path,'set-cookie':'PHPSESSID=first-origin; Path=/'}});
+  if(options.method==='GET'){
+   assert.equal(options.headers.cookie,undefined);
+   return new Response(film+'<input id="ctrl_favs" value="redirect-nonce">',{headers:{'set-cookie':'PHPSESSID=second-origin; Path=/'}});
+  }
+  assert.equal(new URL(url).origin,'https://hdrezka-home.tv');assert.equal(options.headers.cookie,'PHPSESSID=second-origin');assert.equal(options.headers.referer,'https://hdrezka-home.tv'+path);
+  return Response.json({success:true,url:'[720p]https://cdn.example/video.m3u8'});
+ });
+ assert.equal(response.status,200);assert.equal(calls,3);
+});
+test('Bad session paths are rejected before fetch and missing page tokens stop before video',async()=>{
+ let calls=0;const fetcher=async()=>{calls++;return new Response(film);};
+ const wrong=await handleRezka(req({action:'stream',path:path.replace('123','999'),id:123,translator_id:42}),{},fetcher);assert.equal(wrong.status,400);assert.equal(calls,0);
+ const missing=await handleRezka(req({action:'stream',path,id:123,translator_id:42}),{},fetcher);assert.equal((await missing.json()).error,'rezka_session_required');assert.equal(calls,1);
+});
+test('Expired sessions and premium-only replies have distinct errors with no invented stream',async()=>{
+ const expired=await handleRezka(req({action:'stream',id:123,translator_id:42}),{},async()=>Response.json({success:false,message:'Время сессии истекло. Пожалуйста, обновите страницу и повторите попытку'}));assert.equal((await expired.json()).error,'rezka_session_expired');
+ const premium=await handleRezka(req({action:'stream',id:123,translator_id:42}),{},async()=>Response.json({success:true,premium_content:1,url:''}));assert.equal((await premium.json()).error,'rezka_auth_required');
+});
