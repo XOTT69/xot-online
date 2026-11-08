@@ -40,7 +40,7 @@ try{
  await page.waitForTimeout(450);await page.evaluate(()=>$('.xot-online-button').trigger('hover:enter'));await ready();
  assert.equal(await page.evaluate(()=>Lampa.Activity.active().xot_source),'all','A new card ignores last global UFDub selection');
  assert.equal(await page.evaluate(()=>$('.xot-native-row.selector').first().text().includes('Eneyida / UASerials')),true);
- for(const id of ['ufdub','rezka','serialno','kinostrain'])assert.equal(count(id),0);
+ for(const id of ['ufdub','rezka','serialno'])assert.equal(count(id),0);
  await page.evaluate(()=>$('.filter--sort').trigger('hover:enter'));
  const initialPicker=await page.evaluate(()=>$('.selectbox .selector').map(function(){return $(this).text().trim();}).get());
  assert.ok(!initialPicker.some(t=>/AniLibria|аніме|UFDub|HDRezka/.test(t)));await page.evaluate(()=>Lampa.Select.close());

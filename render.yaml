@@ -22,3 +22,5 @@ services:
         value: https://rezka-ua.pub
       - key: XOT_VERIFY_MEDIA
         value: "1"
+      - key: XOT_REZKA_RELAY
+        value: "1"

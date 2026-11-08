@@ -1,5 +1,15 @@
 # Candidates for native free Worker adapters
 
+## Update 2026-11-08
+
+**Kinostrain is implemented in 0.3.17** after Worker and real Lampa film/series
+playback checks. Public search and indexed Nuxt player data are read as data;
+only published Tortuga links are supported. This expands catalog coverage and
+partly shares existing CDN infrastructure. UAKino CX returned a Cloudflare
+challenge (403) and is not enabled. Anime providers are excluded.
+See the [current HD policy and evidence](hd-0317.md). Older checks below remain
+historical observations, not current guarantees.
+
 Checked on 2026-10-26. Eneyida, KinoVezha and UASerials are now native adapters.
 UFDub was added in v0.3.11 after Cloudflare and Lampa playback checks. Other
 entries remain research candidates, not enabled providers.
