@@ -27,12 +27,12 @@ function harness({card=movie,ready=true,stored={},early=false,expose=false}={}) 
  const head={appendChild(node){node.parentNode=this;if(node.tag==='script')scripts.push(node);},removeChild(node){node.parentNode=null;}};
  const document={readyState:'complete',currentScript:null,querySelector:()=>null,
   getElementsByTagName:()=>[],createElement:tag=>({tag,setAttribute(){}}),head};
- const context={Lampa,document,jQuery:jquery,URL,URLSearchParams,Uint8Array,DOMException,console:{info(){},log(){},warn(){},error(){}},
+ const context={Lampa,document,jQuery:jquery,URL,URLSearchParams,Uint8Array,DOMException,AbortController,console:{info(){},log(){},warn(){},error(){}},
   Date:class extends Date{constructor(...args){super(...(args.length?args:[now]));}static now(){return now;}},setTimeout:(fn,ms)=>{const id=++nextTimer;timers.set(id,{at:now+ms,fn});return id;},clearTimeout:id=>timers.delete(id)};
  context.window=context;
  if(early)delete context.Lampa;
  function advance(ms){const end=now+ms;let count=0;while(true){const due=[...timers].filter(([,v])=>v.at<=end).sort((a,b)=>a[1].at-b[1].at)[0];if(!due)break;if(++count>1000)throw Error('timer loop');now=due[1].at;timers.delete(due[0]);due[1].fn();}now=end;}
- function boot(){const code=expose?plugin.replace(/\}\)\(\);\s*$/, 'window.__testMatching={matches:matches,names:names,get:get,voiceKey:voiceKey,ukrainian:ukrainian,chooseQuality:chooseQuality,knownHD:knownHD,decodedSD:decodedSD,hdCandidate:hdCandidate,verifyHD:verifyHD,qualityNote:qualityNote,episodeGroups:episodeGroups,backupGroups:backupGroups,deliveryFamily:deliveryFamily,streamItem:streamItem,sourcePreferences:sourcePreferences,sourceEnabled:sourceEnabled,orderedSources:orderedSources,preferredSource:preferredSource,displayGroups:displayGroups,cachedSearch:cachedSearch,favoriteIdentity:favoriteIdentity,favoriteVoices:favoriteVoices,favoriteVoice:favoriteVoice,watchCardKey:watchCardKey,watchHash:watchHash,watchProfile:watchProfile,watchHistory:watchHistory,rememberWatch:rememberWatch,watchProgress:watchProgress,watchTime:watchTime,latestUnfinished:latestUnfinished,nextUnwatched:nextUnwatched,watchValues:watchValues,undoEligible:undoEligible,qualityProfile:qualityProfile,qualityLimit:qualityLimit,recordSourceHealth:recordSourceHealth,sourceHealth:sourceHealth,rankedGroups:rankedGroups,subtitleOptions:subtitleOptions,publishedSubtitles:publishedSubtitles,introSettings:introSettings,cleanSeason:cleanSeason,futureEpisode:futureEpisode,trackedShows:trackedShows,seriesInventory:seriesInventory,mergeSeriesCheck:mergeSeriesCheck,clearSearchCache:function(){searchCache.clear();},cacheKeys:function(){return Array.from(searchCache.keys());}};})();'):plugin;runInNewContext(code,context);advance(350);}
+ function boot(){const code=expose?plugin.replace(/\}\)\(\);\s*$/, 'window.__testMatching={matches:matches,names:names,get:get,voiceKey:voiceKey,ukrainian:ukrainian,chooseQuality:chooseQuality,knownHD:knownHD,decodedSD:decodedSD,hdCandidate:hdCandidate,verifyHD:verifyHD,qualityNote:qualityNote,episodeGroups:episodeGroups,backupGroups:backupGroups,deliveryFamily:deliveryFamily,streamItem:streamItem,sourcePreferences:sourcePreferences,sourceSearchOperation:sourceSearchOperation,sourceEnabled:sourceEnabled,orderedSources:orderedSources,preferredSource:preferredSource,displayGroups:displayGroups,cachedSearch:cachedSearch,favoriteIdentity:favoriteIdentity,favoriteVoices:favoriteVoices,favoriteVoice:favoriteVoice,watchCardKey:watchCardKey,watchHash:watchHash,watchProfile:watchProfile,watchHistory:watchHistory,rememberWatch:rememberWatch,watchProgress:watchProgress,watchTime:watchTime,latestUnfinished:latestUnfinished,nextUnwatched:nextUnwatched,watchValues:watchValues,undoEligible:undoEligible,qualityProfile:qualityProfile,qualityLimit:qualityLimit,recordSourceHealth:recordSourceHealth,sourceHealth:sourceHealth,rankedGroups:rankedGroups,subtitleOptions:subtitleOptions,publishedSubtitles:publishedSubtitles,introSettings:introSettings,cleanSeason:cleanSeason,futureEpisode:futureEpisode,trackedShows:trackedShows,seriesInventory:seriesInventory,mergeSeriesCheck:mergeSeriesCheck,clearSearchCache:function(){searchCache.clear();},cacheKeys:function(){return Array.from(searchCache.keys());}};})();'):plugin;runInNewContext(code,context);advance(350);}
  function enter(){assert.ok(button,'movie button is mounted');button.handlers['hover:enter']();}
  return {context,Lampa,values,components,scripts,pushes,notices,menus,timers,listeners,boot,advance,enter,get button(){return button;}};
 }
@@ -127,9 +127,9 @@ test('Source settings preserve order, suppress disabled/removed sources and cann
  assert.deepEqual(JSON.parse(JSON.stringify(api.orderedSources(list,true).map(s=>s.id))),['all','filmix','eneyida','ufdub']);
  for(const removed of ['uakino','anilibria']){h.values.xot_native_last_sources[movie.id]=removed;assert.equal(api.preferredSource(movie),'all');}
 });
-test('Initial preferences leave anime out and disable optional UFDub and unavailable Rezka',()=>{
+test('Initial preferences enable connected Rezka and keep optional UFDub and anime out',()=>{
  const h=harness({expose:true});h.boot();const api=h.context.__testMatching;
- assert.equal(api.sourceEnabled('ufdub'),false);assert.equal(api.sourceEnabled('rezka'),false);assert.equal(api.sourceEnabled('eneyida'),true);assert.doesNotMatch(plugin,/id:'anilibria'/);
+ assert.equal(api.sourceEnabled('ufdub'),false);assert.equal(api.sourceEnabled('rezka'),true);assert.equal(api.sourceEnabled('eneyida'),true);assert.doesNotMatch(plugin,/id:'anilibria'/);
  h.values.xot_source_preferences={order:['ufdub'],disabled:[]};assert.equal(api.sourceEnabled('ufdub'),true);
 });
 test('Identical multi-quality video groups merge across catalogs without losing voices or episode identity',()=>{
@@ -320,4 +320,18 @@ test('Unknown MP4 metadata is checked without playback; SD is rejected and cance
 test('Decoded video dimensions reject a false HD label while allowing cropped HD and unknown native-TV metadata',()=>{
  const h=harness({expose:true});h.boot();const {decodedSD}=h.context.__testMatching;
  assert.equal(decodedSD({videoWidth:854,videoHeight:480}),true);assert.equal(decodedSD({videoWidth:1280,videoHeight:536}),false);assert.equal(decodedSD({videoWidth:1920,videoHeight:800}),false);assert.equal(decodedSD({videoWidth:0,videoHeight:0}),false);
+});
+
+test('Connecting Rezka enables it once without resetting other preferences or later explicit choices',()=>{
+ const h=harness({expose:true,stored:{xot_source_preferences:{order:['filmix','rezka'],disabled:['ufdub','kinovezha','rezka']}}});h.boot();
+ assert.equal(h.context.__testMatching.sourceEnabled('rezka'),true);assert.deepEqual(h.values.xot_source_preferences.disabled,['ufdub','kinovezha']);assert.deepEqual(h.values.xot_source_preferences.order,['filmix','rezka']);
+ h.values.xot_source_preferences.disabled.push('rezka');h.context.__XOT_ONLINE_INITIALIZED__=false;h.boot();assert.equal(h.context.__testMatching.sourceEnabled('rezka'),false);
+});
+test('Aggregate sources keep short deadlines while Rezka can wake; cancellation and cleanup stop pending work',()=>{
+ const h=harness({expose:true});h.boot();const {sourceSearchOperation}=h.context.__testMatching,parent=new AbortController();let otherTimeout=0,rezkaTimeout=0;
+ const other=sourceSearchOperation({token:1,signal:parent.signal},'eneyida',()=>otherTimeout++),rezka=sourceSearchOperation({token:1,signal:parent.signal},'rezka',()=>rezkaTimeout++);
+ h.advance(24001);assert.equal(other.signal.aborted,true);assert.equal(otherTimeout,1);assert.equal(rezka.signal.aborted,false);assert.equal(rezkaTimeout,0);
+ parent.abort();assert.equal(rezka.signal.aborted,true);h.advance(120000);assert.equal(rezkaTimeout,0);other.finish();rezka.finish();
+ const owner=new AbortController(),finished=sourceSearchOperation({token:2,signal:owner.signal},'rezka',()=>rezkaTimeout++);finished.finish();h.advance(120000);assert.equal(rezkaTimeout,0);
+ owner.abort();const cancelled=sourceSearchOperation({token:3,signal:owner.signal},'rezka',()=>rezkaTimeout++);assert.equal(cancelled.signal.aborted,true);h.advance(120000);assert.equal(rezkaTimeout,0);cancelled.finish();
 });

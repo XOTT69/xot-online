@@ -40,13 +40,13 @@ try{
  await page.waitForTimeout(450);await page.evaluate(()=>$('.xot-online-button').trigger('hover:enter'));await ready();
  assert.equal(await page.evaluate(()=>Lampa.Activity.active().xot_source),'all','A new card ignores last global UFDub selection');
  assert.equal(await page.evaluate(()=>$('.xot-native-row.selector').first().text().includes('Eneyida / UASerials')),true);
- for(const id of ['ufdub','rezka','serialno'])assert.equal(count(id),0);
+ for(const id of ['ufdub','serialno'])assert.equal(count(id),0);
  await page.evaluate(()=>$('.filter--sort').trigger('hover:enter'));
  const initialPicker=await page.evaluate(()=>$('.selectbox .selector').map(function(){return $(this).text().trim();}).get());
- assert.ok(!initialPicker.some(t=>/AniLibria|аніме|UFDub|HDRezka/.test(t)));await page.evaluate(()=>Lampa.Select.close());
+ assert.ok(!initialPicker.some(t=>/AniLibria|аніме|UFDub/.test(t)));await page.evaluate(()=>Lampa.Select.close());
  await filter('Діагностика пошуку');
  const diagnostics=await page.evaluate(()=>$('.selectbox').text());
- for(const fragment of ['KinoVezha обмежила доступ','Filmix · Пошук не повернув','Serialno · серіали · Джерело лише для серіалів','UFDub · Вимкнено','HDRezka · Вимкнено'])assert.ok(diagnostics.includes(fragment),fragment);
+ for(const fragment of ['KinoVezha обмежила доступ','Filmix · Пошук не повернув','Serialno · серіали · Джерело лише для серіалів','UFDub · Вимкнено','HDRezka · Пошук не повернув'])assert.ok(diagnostics.includes(fragment),fragment);
  assert.ok(!diagnostics.includes('AniLibria'));await page.evaluate(()=>Lampa.Select.close());
  await source('Serialno · серіали');await page.waitForFunction(()=>$('.xot-native-row').text().includes('лише серіали'));assert.equal(count('serialno'),0);await source('Усі джерела');await ready();
  // Cached search cannot cache video addresses: every post remains a fresh request.
@@ -74,11 +74,11 @@ try{
  await page.evaluate(()=>$('.xot--voice').trigger('hover:enter'));await choose('Автовибір української');await ready();
  // Turning everything off must leave settings reachable and perform no searches.
  await filter('Налаштування балансерів');
- for(const name of ['Eneyida','UASerials','Filmix','Serialno','UFDub','Kinostrain']){await choose(name,true);await choose('Вимкнути джерело');}
+ for(const name of ['Eneyida','UASerials','Filmix','Serialno','UFDub','Kinostrain','HDRezka']){await choose(name,true);await choose('Вимкнути джерело');}
  const disabledCount=calls.length;await choose('Готово');
  await page.waitForFunction(()=>$('.xot-native-row').text().includes('Увімкни джерела'));assert.equal(calls.length,disabledCount);
  await filter('Налаштування балансерів');await choose('Відновити початковий порядок і вибір');await choose('Готово');await ready();
- const preferences=await page.evaluate(()=>Lampa.Storage.get('xot_source_preferences'));assert.deepEqual(preferences.disabled,['ufdub','rezka']);
+ const preferences=await page.evaluate(()=>Lampa.Storage.get('xot_source_preferences'));assert.deepEqual(preferences.disabled,['ufdub']);
  assert.deepEqual(forbidden,[]);assert.deepEqual(exceptions,[]);
  console.log(JSON.stringify({origin,defaultSource:'all',initialPicker,changedPicker,mergedRows:2,voicesPreserved:true,searchCacheHit:true,postsRemainFresh:true,explicitRetryBypassesCache:true,settingsAppliedOnce:true,allDisabledRecovery:true,noAnimeRequests:true,requests:calls.length,exceptions},null,2));
 }catch(error){
