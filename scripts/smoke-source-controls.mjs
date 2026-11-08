@@ -11,10 +11,10 @@ try{
  page.on('pageerror',e=>exceptions.push(e.message));
  page.on('request',r=>{if(/\/api\/anilibria|\/lumio\.js|online_mod/.test(r.url()))forbidden.push(r.url());});
  await page.route(origin+'/api/providers',r=>r.fulfill({json:{providers:[]}}));
- for(const provider of ['eneyida','uaserials','kinovezha','filmix','ufdub','rezka','serialno'])await page.route(origin+'/api/'+provider,async route=>{
+ for(const provider of ['eneyida','uaserials','kinovezha','filmix','ufdub','rezka','serialno','kinostrain'])await page.route(origin+'/api/'+provider,async route=>{
   const body=route.request().postDataJSON();calls.push({provider,action:body.action});
   if(provider==='kinovezha')return route.fulfill({status:502,json:{error:'kinovezha_access_denied'}});
-  if(['filmix','ufdub','rezka','serialno'].includes(provider))return route.fulfill({json:{results:[]}});
+  if(['filmix','ufdub','rezka','serialno','kinostrain'].includes(provider))return route.fulfill({json:{results:[]}});
   if(body.action==='search')return route.fulfill({json:{results:[{id:'101',path:'/101-fixture.html',title:body.movie?.titles[0]||body.title,year:2022,series:false}]}});
   const variants=(translation,voice)=>[1080,720].map(quality=>({provider,source:provider,title:'Fixture',translation,voice_id:provider+':'+voice,language:'uk',quality:quality+'p',url:'https://fixture.invalid/movie/'+quality+'.m3u8',season:null,episode:null}));
   return route.fulfill({json:{title:'Fixture',items:variants('Українська · Студія А','a').concat(provider==='eneyida'?variants('Українська · Студія Б','b'):[])}});
@@ -40,7 +40,7 @@ try{
  await page.waitForTimeout(450);await page.evaluate(()=>$('.xot-online-button').trigger('hover:enter'));await ready();
  assert.equal(await page.evaluate(()=>Lampa.Activity.active().xot_source),'all','A new card ignores last global UFDub selection');
  assert.equal(await page.evaluate(()=>$('.xot-native-row.selector').first().text().includes('Eneyida / UASerials')),true);
- for(const id of ['ufdub','rezka','serialno'])assert.equal(count(id),0);
+ for(const id of ['ufdub','rezka','serialno','kinostrain'])assert.equal(count(id),0);
  await page.evaluate(()=>$('.filter--sort').trigger('hover:enter'));
  const initialPicker=await page.evaluate(()=>$('.selectbox .selector').map(function(){return $(this).text().trim();}).get());
  assert.ok(!initialPicker.some(t=>/AniLibria|аніме|UFDub|HDRezka/.test(t)));await page.evaluate(()=>Lampa.Select.close());
@@ -74,7 +74,7 @@ try{
  await page.evaluate(()=>$('.xot--voice').trigger('hover:enter'));await choose('Автовибір української');await ready();
  // Turning everything off must leave settings reachable and perform no searches.
  await filter('Налаштування балансерів');
- for(const name of ['Eneyida','UASerials','Filmix','Serialno','UFDub']){await choose(name,true);await choose('Вимкнути джерело');}
+ for(const name of ['Eneyida','UASerials','Filmix','Serialno','UFDub','Kinostrain']){await choose(name,true);await choose('Вимкнути джерело');}
  const disabledCount=calls.length;await choose('Готово');
  await page.waitForFunction(()=>$('.xot-native-row').text().includes('Увімкни джерела'));assert.equal(calls.length,disabledCount);
  await filter('Налаштування балансерів');await choose('Відновити початковий порядок і вибір');await choose('Готово');await ready();

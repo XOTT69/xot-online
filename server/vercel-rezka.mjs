@@ -2,6 +2,7 @@ import {timingSafeEqual} from 'node:crypto';
 import {handleRezka} from '../worker/rezka.js';
 import {sampleRezkaMedia} from './rezka-media-probe.mjs';
 import {signRezkaMedia} from './rezka-relay.mjs';
+import {verifiedRezkaHD} from './rezka-hd.mjs';
 
 const headers={'content-type':'application/json; charset=utf-8','cache-control':'no-store','x-content-type-options':'nosniff'};
 const reply=(data,status=200)=>Response.json(data,{status,headers});
@@ -81,7 +82,7 @@ export function createVercelRezka({env=process.env,fetcher=fetch}={}){
    const publicOrigin=env.XOT_PUBLIC_ORIGIN||env.RENDER_EXTERNAL_URL;
    if(relay&&publicOrigin&&response.ok&&data.items){
     if(!/^https:\/\/[a-z0-9.-]+$/.test(publicOrigin))return reply({error:'backend_not_configured'},503);
-    data.items=data.items.filter(item=>parseInt(item.quality)>=720&&new URL(item.url).pathname.endsWith('.m3u8')).map(item=>({...item,url:signRezkaMedia(item.url,publicOrigin,token)}));
+    try{data.items=(await verifiedRezkaHD(data.items,transport)).map(item=>({...item,url:signRezkaMedia(item.url,publicOrigin,token)}));}catch{return reply({error:'rezka_hd_unavailable'},502);}
     if(!data.items.length)return reply({error:'rezka_stream_unavailable'},502);
    }
    if(sample&&response.ok&&data.items){try{data.media_sample=await sampleRezkaMedia(data.items,transport);}catch{data.media_sample={error:'media_probe_unavailable'};}}

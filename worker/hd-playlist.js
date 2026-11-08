@@ -7,7 +7,7 @@ function deliveryURL(value,base){
  return url.href;
 }
 function hd(line){
- const m=line.match(/(?:^|,)RESOLUTION=(\d+)x(\d+)(?:,|$)/i);if(!m)return false;
+ const m=line.slice(line.indexOf(':')+1).match(/(?:^|,)RESOLUTION=(\d+)x(\d+)(?:,|$)/i);if(!m)return false;
  return Number(m[1])>=1200||Number(m[2])>=720;
 }
 // A small, regenerated master preserves external audio and subtitles. Video,

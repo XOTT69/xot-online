@@ -42,7 +42,7 @@ try{
  }
  await open({id:1024,title:'Небесні створіння',original_title:'Heavenly Creatures',release_date:'1994-09-02',source:'tmdb'});
  assert.equal(await page.locator('.xot-native-row.selector').count(),1);await page.evaluate(()=>$('.xot-native-row.selector').first().trigger('hover:enter'));
- const movie=await playing();assert.ok(movie.width>=1280);assert.ok(movie.duration>5000);assert.deepEqual(movie.qualities,['Авто']);
+ const movie=await playing();assert.ok(movie.width>=1280);assert.ok(movie.duration>5000);assert.deepEqual(movie.qualities,['1080p']);
  // Native MP4 byte ranges must also allow seeking beyond the opening frame.
  await page.evaluate(()=>{const v=[...document.querySelectorAll('video')].find(v=>!v.paused);v.currentTime=60;});
  await page.waitForFunction(()=>[...document.querySelectorAll('video')].some(v=>v.currentTime>61&&!v.paused&&!v.seeking),null,{timeout:30000});

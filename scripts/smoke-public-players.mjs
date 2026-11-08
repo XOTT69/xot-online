@@ -49,7 +49,7 @@ try{
    const video=[...document.querySelectorAll('video')].find(v=>v.currentTime>1&&!v.paused&&!v.error),play=window.xotPlayed.at(-1);
    return {width:video.videoWidth,height:video.videoHeight,duration:video.duration,time:video.currentTime,selectedURL:play.url,qualities:Object.keys(play.quality),error:video.error?.code||null};
   });
-  assert.deepEqual(state.qualities.sort(),['1080p','480p','720p']);assert.equal(state.width,quality===720?1280:1920);assert.ok(state.duration>6000);assert.equal(state.error,null);
+  assert.deepEqual(state.qualities.sort(),['1080p','720p']);assert.equal(state.width,quality===720?1280:1920);assert.ok(state.duration>6000);assert.equal(state.error,null);
   playback.push({requestedQuality:quality,...state});
   await page.evaluate(()=>Lampa.Player.close());
   await page.waitForTimeout(500);

@@ -20,7 +20,7 @@ try{
   if(aggregateMode&&input.action==='post'){const response=await route.fetch(),data=await response.json();data.unavailable=(data.unavailable||[]).concat(unavailableFixture);return route.fulfill({response,json:data});}
   await route.continue();
  });
- for(const id of ['kinovezha','uaserials','ufdub','serialno'])await page.route(origin+'/api/'+id,route=>emptyMode?route.fulfill({json:{results:[]}}):route.continue());
+ for(const id of ['kinovezha','uaserials','ufdub','serialno','kinostrain'])await page.route(origin+'/api/'+id,route=>emptyMode?route.fulfill({json:{results:[]}}):route.continue());
  await page.route(origin+'/api/anilibria',async route=>{const body=route.request().postDataJSON();if(body.action==='post')unrelatedPosts++;await route.fulfill({json:{results:[{id:999,title:'Unrelated movie',year:2021,series:false}]}});});
  await page.route(origin+'/api/eneyida',async route=>{
   const body=route.request().postDataJSON();
@@ -49,16 +49,13 @@ try{
  }
  async function playing(){await page.waitForFunction(()=>[...document.querySelectorAll('video')].some(video=>video.currentTime>1&&!video.paused&&!video.error),{timeout:30000});}
  await open(movie);
- await page.waitForFunction(()=>$('.xot-native-row').length===1&&$('.xot-native-row').text().includes('Український'),{timeout:30000});
- await page.evaluate(()=>$('.xot--voice').trigger('hover:enter'));await choose('Русский');
- await page.waitForFunction(()=>$('.xot-native-row').length===1&&$('.xot-native-row').text().includes('Русский'));
- await page.evaluate(()=>Lampa.Activity.backward());await page.waitForTimeout(600);await page.evaluate(()=>$('.xot-online-button').trigger('hover:enter'));
- await page.waitForFunction(()=>$('.xot-native-row').length===1&&$('.xot-native-row').text().includes('Русский'),{timeout:30000});
- await page.evaluate(()=>$('.xot--voice').trigger('hover:enter'));await choose('Автовибір української',true);
- await page.waitForFunction(()=>$('.xot-native-row').length===1&&$('.xot-native-row').text().includes('Український'));
- await page.evaluate(()=>$('.filter--filter').trigger('hover:enter'));await choose('Бажана якість');await choose('2160p',true);
+ await page.waitForFunction(()=>$('.xot-native-row').text().includes('від 720p'),null,{timeout:30000});
+ assert.equal(await page.locator('.xot-native-row.selector').count(),0,'SD-only Filmix has no playable rows');
+ await page.evaluate(()=>Lampa.Activity.active().activity.component.changeSource('eneyida'));
+ await page.waitForFunction(()=>$('.xot-native-row.selector').length>0,null,{timeout:30000});
+ await page.evaluate(()=>$('.xot--quality').trigger('hover:enter'));await choose('2160p',true);
  await page.evaluate(()=>$('.xot-native-row.selector').first().trigger('hover:enter'));await playing();
- const fallback=await page.evaluate(()=>({preferred:Lampa.Storage.get('video_quality_default'),qualities:window.xotPlays.at(-1).qualities}));assert.equal(fallback.preferred,2160);assert.deepEqual(fallback.qualities,['480p']);
+ const fallback=await page.evaluate(()=>({preferred:Lampa.Storage.get('video_quality_default'),qualities:window.xotPlays.at(-1).qualities}));assert.equal(fallback.preferred,2160);assert.ok(fallback.qualities.every(q=>parseInt(q)>=720));
  await page.evaluate(()=>Lampa.Player.close());
  aggregateMode=true;await page.evaluate(()=>$('.filter--sort').trigger('hover:enter'));await choose('Усі джерела',true);
  await page.waitForFunction(()=>$('.xot-native-row.selector').length>=2,{timeout:20000});
@@ -95,7 +92,7 @@ try{
  await page.evaluate(()=>Lampa.Player.close());releaseEpisode();await page.waitForTimeout(600);
  assert.equal(await page.evaluate(()=>Lampa.Player.opened()),false,'A late episode response must not reopen a closed player');
  emptyMode=true;await page.evaluate(()=>$('.filter--sort').trigger('hover:enter'));await choose('Усі джерела',true);
- await page.waitForFunction(()=>$('.xot-native-row').text().includes('Доступних джерел не знайдено'),{timeout:30000});
+ await page.waitForFunction(()=>$('.xot-native-row').text().includes('Відео від 720p не знайдено'),{timeout:30000});
  assert.equal(await page.locator('.xot-native-row').count(),2,'One empty message and one retry replace individual source failures');
  assert.equal(await page.locator('.xot--voice:visible').count(),0,'Unavailable-only voices are excluded from aggregate filters');
  assert.equal(await page.evaluate(()=>/UAKino|HDRezka|fixture|помилка|недоступне/.test($('.xot-native-row').text())),false);
@@ -104,10 +101,10 @@ try{
  await choose('HDRezka',true);
  await page.waitForFunction(()=>$('.xot-native-row').text().includes('обмеження доступу'));
  await page.evaluate(()=>$('.filter--sort').trigger('hover:enter'));await choose('Filmix',true);
- await page.waitForFunction(()=>$('.xot-native-row').text().includes('XOT unavailable fixture'));
- assert.equal(await page.locator('.xot--voice:visible').count(),1,'An individual balancer still explains unavailable voices');
+ await page.waitForFunction(()=>$('.xot-native-row').text().includes('від 720p'));
+ assert.equal(await page.locator('.xot--voice:visible').count(),0,'Unavailable-only voices do not clutter the HD picker');
  assert.deepEqual(exceptions,[]);
  assert.deepEqual(removedRequests,[]);
- console.log(JSON.stringify({origin,removedSource:{oldPreferenceFallsBack:true,absentFromPicker:true,requests:removedRequests.length},ukrainianDefault:true,manualVoiceRestored:true,allSources:{partial,failedSourceDidNotBlock:true,onlyFoundResults:true,emptyAndUnavailableHidden:true,emptyMessageAndRetry:true,individualDiagnosticsPreserved:true,unrelatedPosts},quality:{fallback,nextPreferred:next.preferred},playlist:{entries:queue.length,lazy:true,next,lateResponseCancelled:true},exceptions},null,2));
+ console.log(JSON.stringify({origin,removedSource:{oldPreferenceFallsBack:true,absentFromPicker:true,requests:removedRequests.length},sdSourceHidden:true,allSources:{partial,failedSourceDidNotBlock:true,onlyFoundResults:true,emptyAndUnavailableHidden:true,emptyMessageAndRetry:true,individualDiagnosticsPreserved:true,unrelatedPosts},quality:{fallback,nextPreferred:next.preferred},playlist:{entries:queue.length,lazy:true,next,lateResponseCancelled:true},exceptions},null,2));
 }catch(error){for(const page of browser.contexts().flatMap(c=>c.pages()))console.error(await page.evaluate(()=>({rows:window.jQuery?$('.xot-native-row').text():null,select:window.jQuery?$('.selectbox').text():null,playing:window.Lampa?.Player.playdata?.()})).catch(()=>({})));throw error;}
 finally{releaseRezka();releaseEpisode();await browser.close();}

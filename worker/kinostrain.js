@@ -1,4 +1,3 @@
-import {parseDocument,DomUtils} from 'htmlparser2';
 import {sameMovie} from './matching.js';
 import {trustedURL,resolvePlayerItem} from './eneyida.js';
 import {catalogPlayer} from './ukrainian.js';
@@ -25,8 +24,8 @@ async function read(url,fetcher){
 // Nuxt's devalue payload is indexed JSON, not executable JavaScript. Resolve
 // only the selected content branch with explicit cycle/depth/size limits.
 export function parseKinostrainPost(html,path){
- kinostrainPath(path);const root=parseDocument(html),node=DomUtils.findOne(n=>n.name==='script'&&n.attribs?.id==='__NUXT_DATA__',root.children,true);
- if(!node)throw Error('player_not_found');let table;try{table=JSON.parse(DomUtils.textContent(node));}catch{throw Error('player_format');}
+ kinostrainPath(path);const payload=html.match(/<script\b(?=[^>]*\bid=["']__NUXT_DATA__["'])[^>]*>([\s\S]*?)<\/script\s*>/i);
+ if(!payload)throw Error('player_not_found');let table;try{table=JSON.parse(payload[1]);}catch{throw Error('player_format');}
  if(!Array.isArray(table)||table.length>30000)throw Error('player_format');
  const slug=path.startsWith('/movie-')?path.slice(7):path.split('/')[1],season=path.includes('/season-')?Number(path.split('/season-')[1]):null;
  const key='content-'+(season?slug+'-s'+season:'movie-'+slug),record=table.find(row=>row&&typeof row==='object'&&!Array.isArray(row)&&Object.hasOwn(row,key));
@@ -43,7 +42,13 @@ export function parseKinostrainPost(html,path){
   const result=Object.create(null);
   for(const [name,ref]of Object.entries(value)){if(['__proto__','prototype','constructor'].includes(name))throw Error('player_format');result[name]=resolve(ref,depth+1,next);}return result;
  }
- const wrapper=resolve(record[key]),data=wrapper?.data;
+ function objectAt(index){let value=table[index];for(let depth=0;depth<4&&Array.isArray(value)&&['Reactive','ShallowReactive','Ref','ShallowRef'].includes(value[0]);depth++)value=table[value[1]];if(!value||Array.isArray(value)||typeof value!=='object')throw Error('player_format');return value;}
+ const wrapper=objectAt(record[key]),source=objectAt(wrapper.data),data=Object.create(null);
+ // Cast, recommendations, comments and image galleries are not player data.
+ // Avoid inflating their devalue graphs on the free Worker's CPU budget.
+ for(const name of ['id','name','originalName','slug','type','format','yearStart'])if(Object.hasOwn(source,name))data[name]=resolve(source[name]);
+ const seasons=table[source.seasons];if(!Array.isArray(seasons))throw Error('player_format');
+ data.seasons=seasons.map(index=>{const row=objectAt(index),result=Object.create(null);for(const name of ['number','playerData','rightsBlocked','announce'])if(Object.hasOwn(row,name))result[name]=resolve(row[name]);return result;});
  if(!data||data.slug!==slug||!/^(?:movie|serial|cartoon-movie|cartoon-serial)$/.test(data.type)||data.format==='anime')throw Error('movie_mismatch');
  const row=searchRow({...data,firstReadySeason:{number:season||1}});if(!row)throw Error('movie_mismatch');
  const active=(data.seasons||[]).find(s=>Number(s.number)===(season||1));

@@ -34,7 +34,8 @@ Frankfurt, origin `https://rezka-ua.pub`, перевіркою адрес CDN,
 Він запускає `npm run server:rezka`: окремий Node HTTP-сервер для того самого
 адаптера й сторінки діагностики, що вже перевірялися на Vercel. Гостьові
 сесії включені. Баз даних і дисків немає. Для власного репозиторію `xot-rezka`
-оновлення коду розгортаються після успішних CI-перевірок (`checksPass`).
+оновлення коду запускають збірку на commit; сама збірка виконує `npm test`.
+Це не залежить від окремого статусу Vercel, який не запускає цей Node-сервер.
 
 1. [Увійти в Render через GitHub](https://dashboard.render.com/register).
 2. Відкрити [створення Blueprint](https://render.com/deploy?repo=https%3A%2F%2Fgithub.com%2FXOTT69%2Fxot-rezka).

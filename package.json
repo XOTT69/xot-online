@@ -26,7 +26,9 @@
     "smoke:favorite-voices": "node scripts/smoke-favorite-voices.mjs",
     "smoke:watch-controls": "node scripts/smoke-watch-controls.mjs",
     "smoke:comfort": "node scripts/smoke-comfort.mjs",
-    "smoke:player-comfort": "node scripts/smoke-player-comfort.mjs"
+    "smoke:player-comfort": "node scripts/smoke-player-comfort.mjs",
+    "smoke:hd": "node scripts/smoke-hd.mjs",
+    "smoke:ufdub-hd": "node scripts/smoke-ufdub-hd.mjs"
   },
   "devDependencies": {
     "playwright-core": "^1.61.1",

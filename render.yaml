@@ -5,8 +5,10 @@ services:
     runtime: node
     plan: free
     region: frankfurt
-    autoDeployTrigger: checksPass
-    buildCommand: npm ci --omit=dev --ignore-scripts --no-audit --no-fund
+    # Vercel's unrelated deployment status must not block this Node service.
+    # The Render build itself runs the repository's deterministic checks.
+    autoDeployTrigger: commit
+    buildCommand: npm ci --omit=dev --ignore-scripts --no-audit --no-fund && npm test
     startCommand: npm run server:rezka
     healthCheckPath: /healthz
     envVars:

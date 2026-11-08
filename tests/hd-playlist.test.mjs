@@ -5,6 +5,7 @@ const base='https://cdn.hdvbua.pro/movie/master.m3u8?token=private';
 const master='#EXTM3U\n#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="a",NAME="UK",URI="uk/audio.m3u8"\n#EXT-X-MEDIA:TYPE=SUBTITLES,GROUP-ID="s",NAME="UK",URI="uk/subs.m3u8"\n#EXT-X-STREAM-INF:BANDWIDTH=100,RESOLUTION=854x352,AUDIO="a",SUBTITLES="s"\n480.m3u8\n#EXT-X-STREAM-INF:BANDWIDTH=200,RESOLUTION=1280x528,AUDIO="a",SUBTITLES="s"\n720.m3u8\n#EXT-X-STREAM-INF:BANDWIDTH=300,RESOLUTION=1920x794,AUDIO="a",SUBTITLES="s"\n1080.m3u8';
 test('HD master removes SD while preserving cropped HD, separate audio and subtitles with absolute URLs',()=>{
  const result=filterHDMaster(master,base);assert.doesNotMatch(result,/480|854x352/);assert.match(result,/RESOLUTION=1280x528/);assert.match(result,/RESOLUTION=1920x794/);assert.match(result,/URI="https:\/\/cdn.hdvbua.pro\/movie\/uk\/audio.m3u8"/);assert.match(result,/SUBTITLES="s"/);
+ assert.match(filterHDMaster('#EXTM3U\n#EXT-X-STREAM-INF:RESOLUTION=1280x720,BANDWIDTH=100\n720.m3u8',base),/720.m3u8/);
 });
 test('HD master fails closed for unknown or low resolution and private or credential-bearing renditions',()=>{
  for(const body of ['#EXTM3U\n#EXTINF:5,\nvideo.ts','#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=100\na.m3u8',master.replace(/1280x528|1920x794/g,'640x360')])assert.throws(()=>filterHDMaster(body,base));
