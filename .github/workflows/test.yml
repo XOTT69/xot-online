@@ -14,10 +14,42 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+          cache: npm
+      - name: Install pinned dependencies
+        run: npm ci --ignore-scripts --no-fund --no-audit
       - name: JavaScript syntax and tests
         run: |
+          node --check public/m.js
           node --check public/online.js
+          node --check m.js
           node --check online.js
           node --check worker/filmix.js
+          node --check worker/rezka.js
+          node --check worker/anilibria.js
+          node --check worker/eneyida.js
+          node --check worker/ukrainian.js
+          node --check worker/ufdub.js
+          node --check worker/serialno.js
+          node --check worker/backend.js
           node --check worker/index.js
+          node --check server/index.mjs
+          node --check server/rezka-host.mjs
+          node --check server/vercel-rezka.mjs
+          node --check api/rezka.js
+          node --check vercel-public/check.js
+          node --check vercel-public/diagnostics.js
+          node --check scripts/smoke-assets.mjs
+          node --check scripts/smoke-features.mjs
+          node --check scripts/smoke-backup.mjs
+          node --check scripts/smoke-public-players.mjs
+          node --check scripts/smoke-ufdub.mjs
+          node --check scripts/smoke-source-controls.mjs
+          node --check scripts/smoke-serialno.mjs
+          node --check scripts/smoke-watch.mjs
+          node --check scripts/smoke-favorite-voices.mjs
+          node --check scripts/smoke-watch-controls.mjs
+          node --check scripts/smoke-comfort.mjs
+          node --check scripts/smoke-player-comfort.mjs
           npm test
+      - name: Build Worker and static asset routing
+        run: npx wrangler deploy --config wrangler.toml --dry-run --outdir /tmp/xot-worker

@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="uk">
+<head>
+ <meta charset="utf-8">
+ <meta name="viewport" content="width=device-width,initial-scale=1">
+ <title>ХОТ · Перевірка Rezka</title>
+ <link rel="stylesheet" href="/style.css">
+ <script type="module" src="/check.js"></script>
+</head>
+<body>
+ <main>
+  <p class="brand">ХОТ / Rezka</p>
+  <h1>Перевірка підключення</h1>
+  <p>Перевіримо пошук, озвучення та отримання відеопосилань із цього сервера.</p>
+  <form id="check-form">
+   <label for="token">Ключ адаптера</label>
+   <input id="token" type="password" minlength="32" maxlength="512" required autocomplete="off" spellcheck="false" aria-describedby="token-hint">
+   <p id="token-hint" class="hint">Значення XOT_SERVER_TOKEN із налаштувань сервера. Зберігається лише до закриття сторінки.</p>
+   <div class="buttons"><button id="start" type="submit">Перевірити</button><button id="cancel" type="button" hidden>Скасувати</button></div>
+  </form>
+  <p id="status" role="status" aria-live="polite">Перевірка ще не запускалася.</p>
+  <ol id="results"></ol>
+  <button id="copy" type="button" hidden>Скопіювати звіт</button>
+  <p class="hint">Це перевірка доступу до джерела. Реальний запуск відео на телевізорі перевіряється окремо в Lampa. Ключ і відеоадреси до звіту не потрапляють.</p>
+ </main>
+</body>
+</html>

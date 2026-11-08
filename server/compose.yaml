@@ -1,0 +1,39 @@
+services:
+  xot:
+    build:
+      context: ..
+      dockerfile: server/Dockerfile
+    restart: unless-stopped
+    environment:
+      XOT_SERVER_TOKEN: ${XOT_SERVER_TOKEN:?Set a random token of at least 32 characters}
+      XOT_REZKA_ORIGIN: ${XOT_REZKA_ORIGIN:-https://hdrezka.ag}
+    expose:
+      - "8788"
+    mem_limit: 512m
+    cpus: 1.0
+    logging:
+      options:
+        max-size: "10m"
+        max-file: "3"
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      - xot
+    environment:
+      XOT_API_HOST: ${XOT_API_HOST:?Set the API hostname pointing to this server}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    logging:
+      options:
+        max-size: "10m"
+        max-file: "3"
+volumes:
+  caddy_data:
+  caddy_config:

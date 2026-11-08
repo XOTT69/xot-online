@@ -117,3 +117,51 @@ test('Filmix profile string "false" does not grant a Pro tier',async()=>{
   assert.deepEqual(result.items.map(x=>x.quality),['720p','480p']);
  }finally{globalThis.fetch=old;}
 });
+
+test('anonymous Filmix requests may use public HTTP with a fresh unlinked device ID',async()=>{
+ const old=globalThis.fetch,seen=[];
+ try{
+  globalThis.fetch=async input=>{const url=new URL(input);seen.push(url);if(url.protocol==='https:')throw TypeError('TLS certificate');return new Response(JSON.stringify([{id:99,title:'Example'}]));};
+  const r=await handleFilmix(req({action:'search',title:'Example'}),{});const data=await r.json();assert.equal(r.status,200);assert.equal(data.transport,'anonymous_http');assert.notEqual(seen[1].searchParams.get('user_dev_id'),'0123456789abcdef0123456789abcdef');assert.equal(seen[1].searchParams.has('user_dev_token'),false);
+ }finally{globalThis.fetch=old;}
+});
+test('Filmix never falls back to HTTP for personal tokens or pairing',async()=>{
+ const old=globalThis.fetch,seen=[];
+ try{
+  globalThis.fetch=async input=>{seen.push(new URL(input).protocol);throw TypeError('TLS certificate');};
+  for(const body of [{action:'search',title:'Example',device_token:'private-token'},{action:'pair'},{action:'confirm',temp_token:'temporary'}])assert.equal((await handleFilmix(req(body),{})).status,502);
+  assert.deepEqual(seen,['https:','https:','https:']);
+ }finally{globalThis.fetch=old;}
+});
+test('Filmix uses the redirect mode supported by Cloudflare and rejects redirects explicitly',async()=>{
+ const old=globalThis.fetch;
+ try{globalThis.fetch=async(url,options)=>{assert.equal(options.redirect,'manual');return new Response('',{status:302});};const response=await handleFilmix(req({action:'search',title:'Example'}),{});assert.equal((await response.json()).error,'filmix_http_302');}finally{globalThis.fetch=old;}
+});
+
+test('every Filmix voice remains visible even when it has no quality within the current cap',async()=>{
+ const {filmixInventory}=await import('../worker/filmix.js');
+ const post={title:'Film',player_links:{movie:[
+  {translation:'RU',link:'https://cdn.example/ru_[2160,720,480,].mp4'},
+  {translation:'UA',link:'https://cdn.example/ua_[,1080,720,480,].mp4'},
+  {translation:'HDR + UA',link:'https://cdn.example/hdr_[2160,,,,,].mp4'}
+ ]}};
+ const free=filmixInventory(post,480);
+ assert.equal(free.voices.length,3);assert.equal(free.items.length,2);assert.equal(free.unavailable.length,1);
+ assert.equal(free.unavailable[0].translation,'HDR + UA');assert.deepEqual(free.unavailable[0].available_qualities,['2160p']);
+ assert.equal(free.unavailable[0].reason,'quality_limit');assert.equal(free.quality_cap,480);assert.equal('url' in free.unavailable[0],false);
+ const full=filmixInventory(post,2160);assert.equal(full.voices.length,3);assert.equal(full.unavailable.length,0);assert.ok(full.voices.every(v=>v.available));
+});
+test('Filmix does not cut later voices or episodes after 350 rows',async()=>{
+ const {filmixInventory}=await import('../worker/filmix.js');
+ const episodes=Array.from({length:400},(_,i)=>({number:i+1,link:'https://cdn.example/'+(i+1)+'_[480].mp4'}));
+ const inventory=filmixInventory({title:'Series',player_links:{playlist:{1:{RU:episodes,UA:episodes}}}},480);
+ assert.equal(inventory.items.length,800);assert.equal(inventory.voices.length,2);
+ assert.ok(inventory.items.some(x=>x.translation==='UA'&&x.episode===400));
+});
+test('distinct Filmix translations sharing a long prefix retain separate identities',async()=>{
+ const {filmixInventory}=await import('../worker/filmix.js');
+ const voices=['A','B'].map(suffix=>({translation:'Voice '.repeat(30)+suffix,link:'https://cdn.example/video_[480].mp4'}));
+ const inventory=filmixInventory({title:'Film',player_links:{movie:voices}},480);
+ assert.notEqual(inventory.items[0].voice_id,inventory.items[1].voice_id);
+ assert.notEqual(inventory.items[0].translation,inventory.items[1].translation);
+});
