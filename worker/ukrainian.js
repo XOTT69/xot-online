@@ -99,15 +99,16 @@ export function matchesMirrorMedia(item,post){
  }
  return false;
 }
-export async function catalogPlayer(url,post,referer){
- try{return await loadPublicPlayer(url,post,referer);}catch(error){
+export async function catalogPlayer(url,post,referer,{singleEpisode=false}={}){
+ const playerPost=singleEpisode?{...post,series:false}:post;
+ try{return await loadPublicPlayer(url,playerPost,referer);}catch(error){
   // No CAPTCHA, authentication, or 403/429 fallback: only the unavailable public
   // Tortuga page that responds with a non-player document may use its public alias.
   if(error?.message!=='eneyida_player_format')throw error;
   const parsed=trustedURL(url,'player'),match=parsed.pathname.match(/^\/(vod|embed)\/(\d+)$/);
   if(!['tortuga.tw','tortuga.wtf'].includes(parsed.hostname)||!match)throw error;
   const alternate='https://hdvbua.pro/'+(match[1]==='vod'?'vid':'embd')+'/'+match[2];
-  const items=(await loadPublicPlayer(alternate,post,referer)).filter(item=>matchesMirrorMedia(item,post));
+  const items=(await loadPublicPlayer(alternate,playerPost,referer)).filter(item=>matchesMirrorMedia(item,post));
   if(!items.length)throw Error('movie_mismatch');
   return items.map(item=>({...item,player_source:'HDVB UA'}));
  }

@@ -2,6 +2,9 @@ import {createServer} from 'node:http';
 import {readFile} from 'node:fs/promises';
 import {fileURLToPath} from 'node:url';
 import {createVercelRezka} from './vercel-rezka.mjs';
+import {handleRezkaRelay} from './rezka-relay.mjs';
+import {Readable} from 'node:stream';
+import {pipeline} from 'node:stream/promises';
 
 const assets=new Map([
  ['/',{file:'index.html',type:'text/html; charset=utf-8'}],
@@ -23,15 +26,18 @@ export function createRezkaHost({env=process.env,fetcher=fetch}={}){
    try{const asset=assets.get(pathname),body=await readFile(new URL('../vercel-public/'+asset.file,import.meta.url));res.writeHead(200,{...headers,'content-type':asset.type});res.end(req.method==='HEAD'?undefined:body);}catch{return reply(500,{error:'assets_unavailable'});}
    return;
   }
-  if(pathname!=='/api/rezka')return reply(404,{error:'not_found'});
-  if(!['GET','POST'].includes(req.method))return reply(405,{error:'method_not_allowed'});
+  const isMedia=pathname.startsWith('/media/');
+  if(pathname!=='/api/rezka'&&!isMedia)return reply(404,{error:'not_found'});
+  if(!(isMedia?['GET','HEAD','OPTIONS']:['GET','POST']).includes(req.method))return reply(405,{error:'method_not_allowed'});
   if(active>=12)return reply(429,{error:'backend_busy'});active++;
   try{
    const chunks=[];let size=0;
    for await(const chunk of req){size+=chunk.length;if(size>4096){reply(413,{error:'request_too_large'});return;}chunks.push(chunk);}
-   const request=new Request('http://localhost/api/rezka',{method:req.method,headers:req.headers,...(req.method==='POST'?{body:Buffer.concat(chunks)}:{})});
-   const response=await handle(request);
-   res.writeHead(response.status,{...headers,...Object.fromEntries(response.headers)});res.end(Buffer.from(await response.arrayBuffer()));
+   const controller=new AbortController();res.once('close',()=>controller.abort());
+   const request=new Request('http://localhost'+req.url,{method:req.method,headers:req.headers,signal:controller.signal,...(req.method==='POST'?{body:Buffer.concat(chunks)}:{})});
+   const response=isMedia?await handleRezkaRelay(request,{secret:env.XOT_SERVER_TOKEN,origin:env.XOT_PUBLIC_ORIGIN||env.RENDER_EXTERNAL_URL,fetcher}):await handle(request);
+   res.writeHead(response.status,{...headers,...Object.fromEntries(response.headers)});
+   if(response.body)await pipeline(Readable.fromWeb(response.body),res);else res.end();
   }catch{if(!res.headersSent)reply(502,{error:'backend_unavailable'});else res.end();}
   finally{active--;}
  });

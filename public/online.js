@@ -1,7 +1,7 @@
 (function () {
 'use strict';
 if (!window.Lampa || window.__XOT_ONLINE_INITIALIZED__) return;
-var VERSION='0.3.16', DEFAULT_API='https://xot-online.ai-beta69690.workers.dev';
+var VERSION='0.3.17', DEFAULT_API='https://xot-online.ai-beta69690.workers.dev';
 var API_BASE=window.__XOT_API_BASE__ || (function () {
  var scripts=document.getElementsByTagName('script');
  for(var i=scripts.length-1;i>=0;i--){
@@ -12,7 +12,7 @@ var API_BASE=window.__XOT_API_BASE__ || (function () {
  }
  return DEFAULT_API;
 })();
-var BASE_SOURCES=[{id:'all',title:'Усі джерела',kind:'aggregate'},{id:'eneyida',title:'Eneyida',kind:'native'},{id:'uaserials',title:'UASerials',kind:'native'},{id:'kinovezha',title:'KinoVezha',kind:'native'},{id:'filmix',title:'Filmix',kind:'native'},{id:'serialno',title:'Serialno · серіали',kind:'native',seriesOnly:true},{id:'ufdub',title:'UFDub',kind:'native'},{id:'rezka',title:'HDRezka',kind:'native'}];
+var BASE_SOURCES=[{id:'all',title:'Усі джерела',kind:'aggregate'},{id:'eneyida',title:'Eneyida',kind:'native'},{id:'uaserials',title:'UASerials',kind:'native'},{id:'kinovezha',title:'KinoVezha',kind:'native'},{id:'kinostrain',title:'Kinostrain',kind:'native'},{id:'filmix',title:'Filmix',kind:'native'},{id:'serialno',title:'Serialno · серіали',kind:'native',seriesOnly:true},{id:'ufdub',title:'UFDub',kind:'native'},{id:'rezka',title:'HDRezka',kind:'native'}];
 var lastCard=null,buttonTimers=[],screenCounter=0,searchCache=new Map(),episodeCache=new Map(),watchEditing=false,menuEpoch=0;
 function notify(message){if(Lampa.Noty)Lampa.Noty.show(message);}
 function get(key,fallback){try{
@@ -54,7 +54,7 @@ function matches(item,card){
  var expected=names(card).map(normalized);
  return [item.title,item.original_title].concat(item.alternative_titles||[]).filter(function(value){return typeof value==='string';}).map(normalized).some(function(value){return expected.indexOf(value)>=0;});
 }
-function publicPlayerSource(id){return ['eneyida','kinovezha','uaserials','ufdub','serialno'].indexOf(id)>=0;}
+function publicPlayerSource(id){return ['eneyida','kinovezha','uaserials','ufdub','serialno','kinostrain'].indexOf(id)>=0;}
 function voiceKey(item){return item.voice_id||item.translation||'Оригінал';}
 function ukrainian(item){
  var language=String(item.language||item.lang||item.audio_language||'').toLowerCase();
@@ -144,7 +144,7 @@ function watchValues(mark){
 function sameWatchValues(a,b){return ['percent','time','duration'].every(function(key){return Number(a[key])===Number(b[key]);});}
 function undoEligible(mark,entry){return !!entry.applied&&sameWatchValues(watchValues(mark),entry.after)&&(!entry.updated||Number(mark.updated)===entry.updated);}
 var QUALITY_PROFILES={economy:{title:'Економний',cap:720},balanced:{title:'Збалансований',cap:1080},maximum:{title:'Максимальна',cap:2160}};
-function qualityLimit(){var cap=Number(get('video_quality_default',1080));return [480,720,1080,1440,2160].includes(cap)?cap:1080;}
+function qualityLimit(){var cap=Number(get('video_quality_default',1080));return cap===480?720:[720,1080,1440,2160].includes(cap)?cap:1080;}
 function qualityProfile(){var key=get('xot_quality_profile','custom');return QUALITY_PROFILES[key]&&QUALITY_PROFILES[key].cap===qualityLimit()?key:'custom';}
 function sourceHealth(){
  var value=get('xot_source_health_'+watchProfile(),{}),result={};if(!value||typeof value!=='object'||Array.isArray(value))return result;
@@ -220,12 +220,53 @@ function mergeSeriesCheck(record,keys){
  var added=record.episodes.length?keys.filter(function(key){var numbers=key.split('|').map(Number);return !previous.has(key)&&(!anchor||numbers[0]>anchor[0]||numbers[0]===anchor[0]&&numbers[1]>anchor[1]);}):[];
  return Object.assign({},record,{episodes:Array.from(new Set(record.episodes.concat(keys))).slice(-1000),pending:Array.from(new Set(record.pending.concat(added))).slice(-1000),checked:Date.now()});
 }
+function qualityNumber(value){
+ var label=String(value||'').trim();if(/^(?:4k|uhd)$/i.test(label))return 2160;
+ return /^(?:[1-9]\d{2,3})p?(?:\s+(?:ultra|hq))?$/i.test(label)?parseInt(label):0;
+}
+function knownHD(item){
+ var quality=qualityNumber(item.quality);
+ if(quality)return quality>=720;
+ var list=item.available_qualities;
+ return Array.isArray(list)&&list.some(function(q){return qualityNumber(q)>=720;});
+}
+function hdCandidate(item){
+ if(qualityNumber(item.quality))return knownHD(item);
+ if(Array.isArray(item.available_qualities)&&item.available_qualities.length)return knownHD(item);
+ return item.needs_resolve===true||/\.mp4$/i.test((function(){try{return new URL(item.url).pathname;}catch(e){return '';}})());
+}
+function qualityNote(items){
+ var list=Array.from(new Set(items.flatMap(function(item){return item.available_qualities||[item.quality];}).filter(function(q){return qualityNumber(q)>=720;}))).sort(function(a,b){return qualityNumber(b)-qualityNumber(a);});
+ return list.length?list.join(' · '):'Перевірка HD перед запуском';
+}
 function chooseQuality(items,preferred){
- var quality={};items.forEach(function(item){if(media(item.url))quality[item.quality||'Авто']=item.url;});
- var keys=Object.keys(quality).sort(function(a,b){return (parseInt(b)||0)-(parseInt(a)||0);});
- var auto=keys.filter(function(k){return !parseInt(k);})[0];
- var key=preferred===0?(auto||keys[0]):keys.filter(function(k){return parseInt(k)>0&&parseInt(k)<=preferred;})[0]||auto||keys[keys.length-1];
+ var quality={};items.forEach(function(item){if(media(item.url)&&knownHD(item))quality[item.quality||'Авто']=item.url;});
+ var keys=Object.keys(quality).sort(function(a,b){return qualityNumber(b)-qualityNumber(a);});
+ var cap=Math.max(720,Number(preferred)||2160),key=keys.filter(function(k){return qualityNumber(k)>=720&&qualityNumber(k)<=cap;})[0]||keys.filter(function(k){return !qualityNumber(k);})[0]||keys[keys.length-1];
  return {url:quality[key],quality:quality};
+}
+function verifyHD(items,signal){
+ return Promise.all(items.map(function(item){
+  if(qualityNumber(item.quality))return Promise.resolve(knownHD(item)?item:null);
+  if(knownHD(item)){
+   // Masters keep external audio/subtitles; only their small playlist is filtered.
+   var copy=Object.assign({},item,{available_qualities:item.available_qualities.filter(function(q){return qualityNumber(q)>=720;})});
+   if(new URL(item.url).origin!==API_BASE||new URL(item.url).pathname!=='/api/hd.m3u8')copy.url=API_BASE+'/api/hd.m3u8?url='+encodeURIComponent(item.url);return Promise.resolve(copy);
+  }
+  if(!media(item.url)||!new URL(item.url).pathname.toLowerCase().endsWith('.mp4'))return Promise.resolve(null);
+  return new Promise(function(resolve,reject){
+   var video=document.createElement('video'),timer,done=false;
+   function finish(error,value){if(done)return;done=true;clearTimeout(timer);video.onloadedmetadata=video.onerror=null;if(signal)signal.removeEventListener('abort',abort);video.removeAttribute('src');video.load();if(error)reject(error);else resolve(value);}
+   function abort(){finish(new DOMException('Cancelled','AbortError'));}
+   video.preload='metadata';video.muted=true;video.onloadedmetadata=function(){
+    var width=video.videoWidth,height=video.videoHeight,q=width>=3800||height>=2160?2160:width>=2500||height>=1440?1440:width>=1900||height>=1080?1080:width>=1200||height>=720?720:0;
+    finish(null,q?Object.assign({},item,{quality:q+'p',video_width:width,video_height:height}):null);
+   };
+   video.onerror=function(){finish(null,null);};timer=setTimeout(function(){finish(null,null);},12000);
+   if(signal){if(signal.aborted)return abort();signal.addEventListener('abort',abort,{once:true});}
+   video.src=item.url;video.load();
+  });
+ })).then(function(list){var found=list.filter(Boolean);if(!found.length)throw Error('hd_unavailable');return found;});
 }
 function episodeGroups(items,current){
  var groups=new Map();
@@ -252,7 +293,7 @@ function deliveryFamily(value){
 }
 function backupGroups(items,current,blocked){
  var groups=new Map(),seen=new Set();
- items.filter(function(item){return streamItem(item)&&!blocked.has(deliveryFamily(item.url||item.resolve_url))&&(current.episode?item.season===current.season&&item.episode===current.episode:!item.episode);}).forEach(function(item){var key=item.provider+'|'+voiceKey(item);if(!groups.has(key))groups.set(key,[]);groups.get(key).push(item);});
+ items.filter(function(item){return streamItem(item)&&hdCandidate(item)&&!blocked.has(deliveryFamily(item.url||item.resolve_url))&&(current.episode?item.season===current.season&&item.episode===current.episode:!item.episode);}).forEach(function(item){var key=item.provider+'|'+voiceKey(item);if(!groups.has(key))groups.set(key,[]);groups.get(key).push(item);});
  return Array.from(groups.values()).filter(function(group){var key=group.map(function(item){return item.url||item.resolve_url;}).sort().join('|');if(seen.has(key))return false;seen.add(key);return true;});
 }
 
@@ -260,6 +301,9 @@ function safeText(value){return String(value==null?'':value).replace(/[&<>"']/g,
 function media(value){try{var u=new URL(value);return u.protocol==='https:'&&!u.username&&!u.password&&/\.(?:m3u8|mp4|mpd)(?:$|:hls:)/i.test(u.pathname);}catch(e){return false;}}
 function streamItem(item){
  if(media(item.url))return true;
+ if(item.provider==='kinostrain'&&item.needs_resolve===true){
+  try{var player=new URL(item.resolve_url);return player.protocol==='https:'&&!player.username&&!player.password&&!player.port&&['tortuga.tw','tortuga.wtf','hdvbua.pro'].includes(player.hostname)&&/^\/(?:vod|vid)\/\d+$/.test(player.pathname)&&!player.search&&!player.hash&&/^\/(?:movie-[a-z0-9-]+|[a-z0-9-]+\/season-[1-9]\d{0,2})$/.test(item.catalog_path||'')&&typeof item.voice_id==='string';}catch(e){return false;}
+ }
  if(item.provider!=='ufdub'||item.needs_resolve!==true||!/^\d{1,8}$/.test(String(item.post_id)))return false;
  try{var u=new URL(item.resolve_url),keys=Array.from(u.searchParams.keys());return u.origin==='https://ufdub.com'&&!u.username&&!u.password&&!u.hash&&u.pathname==='/video/VIDEOS.php'&&u.searchParams.get('ID')===String(item.post_id)&&/^[1-9]\d{0,4}$/.test(u.searchParams.get('POS')||'')&&Boolean(u.searchParams.get('Seriya'))&&keys.length===4&&new Set(keys).size===4&&keys.every(function(k){return ['ID','TAB','Seriya','POS'].indexOf(k)>=0;});}catch(e){return false;}
 }
@@ -276,9 +320,10 @@ function preferredSource(card){
 }
 function readableError(error){
  var code=error&&error.message||String(error||'');
+ if(code==='hd_unavailable')return 'Для цього озвучення немає підтвердженого відео від 720p. Обери інше озвучення або балансер.';
  var eneyidaErrors={eneyida_movie_mismatch:'Сторінка Eneyida не відповідає вибраному фільму. Уточни назву через пошук угорі.',eneyida_access_denied:'Eneyida обмежила доступ. Спробуй інший балансер.',eneyida_timeout:'Eneyida не відповіла вчасно.',eneyida_player_not_found:'На сторінці Eneyida не знайдено доступного плеєра.',eneyida_player_format:'Eneyida змінила формат плеєра.',eneyida_invalid_playlist:'Eneyida не повернула придатного відеоплейліста.',eneyida_stream_unavailable:'Для цього фільму або серії Eneyida не повернула відео.',eneyida_unsupported_stream:'Цей формат відео Eneyida поки не підтримується.',eneyida_unavailable:'Eneyida зараз недоступна. Повтори запит або вибери інший балансер.'};
- var publicError=code.match(/^(kinovezha|uaserials|ufdub|serialno)_(.+)$/);
- if(publicError){var name={kinovezha:'KinoVezha',uaserials:'UASerials',ufdub:'UFDub',serialno:'Serialno'}[publicError[1]];return (eneyidaErrors['eneyida_'+publicError[2]]||'Eneyida не відповіла коректно. Повтори запит або вибери інший балансер.').replace(/Eneyida/g,name);}
+ var publicError=code.match(/^(kinovezha|uaserials|ufdub|serialno|kinostrain)_(.+)$/);
+ if(publicError){var name={kinovezha:'KinoVezha',uaserials:'UASerials',ufdub:'UFDub',serialno:'Serialno',kinostrain:'Kinostrain'}[publicError[1]];return (eneyidaErrors['eneyida_'+publicError[2]]||'Eneyida не відповіла коректно. Повтори запит або вибери інший балансер.').replace(/Eneyida/g,name);}
  if(eneyidaErrors[code])return eneyidaErrors[code];
  if(code==='rezka_movie_mismatch')return 'Сторінка HDRezka не відповідає назві, року або типу відкритої картки. Уточни пошук.';
  if(code==='rezka_auth_required')return 'Це озвучення HDRezka потребує входу або відповідного доступу в сервісі. Обери доступне гостьове озвучення.';
@@ -326,7 +371,7 @@ function registerScreen(){
  Lampa.Component.add('xot_online',function(params){
   var self=this,$=window.jQuery,card=params.movie,files=new Lampa.Explorer(params),scroll=new Lampa.Scroll({mask:true,over:true}),filter=new Lampa.Filter(params);
   var sources=BASE_SOURCES.slice(),sourceId=params.xot_source||preferredSource(card),query=params.search||title(card),manual=false;
-  var providerController=new AbortController(),providerTimer=null,voiceButton=null,allGroups=[],playbackRequest=null,playbackSerial=0,owner='xot_'+(++screenCounter),playingOwned=false,advancing=false;
+  var providerController=new AbortController(),providerTimer=null,voiceButton=null,qualityButton=null,allGroups=[],playbackRequest=null,playbackSerial=0,owner='xot_'+(++screenCounter),playingOwned=false,advancing=false;
   var backupContext=null,bootTimer=null,lastPosition=0,backupEpisode='',failedFamilies=new Set(),postVerified=true,singleDiagnostic=null,sourceSettingsDirty=false;
   var progressTimer=null,progressDirty=false,watchHashes=new Set(),ownedWork=null,watchStarted=false,lastWatchSave=0,watchFocus=null,restoreWatchFocus=null,suppressRowEnterUntil=0,watchNoticeNode=null,watchNoticeTimer=null;
   var seasonMetadata={},seasonRequests={},metadataSerial=0,metadataTimers=[],updatesController=new AbortController(),updatesStarted=false,comfortButton=null,introButton=null,readyTimer=null;
@@ -364,7 +409,7 @@ function registerScreen(){
    if(action){bind(row,action);if(!last)last=row[0];}else row.removeClass('selector');
    scroll.append(row);return row;
   }
-  function listedItems(){return sourceId==='all'?streams:streams.concat(unavailable);}
+  function listedItems(){return streams.filter(hdCandidate);}
   function episodeInfo(item){var data=seasonMetadata[item.season];return data&&data.episodes.find(function(ep){return ep.episode===Number(item.episode);});}
   function displayDate(value){return value?value.split('-').reverse().join('.'):'';}
   function metadataRow(row,item){
@@ -403,7 +448,7 @@ function registerScreen(){
    },returnFromComfort);
   }
   function profileMenu(){
-   select(Object.keys(QUALITY_PROFILES).map(function(key){var profile=QUALITY_PROFILES[key];return {title:profile.title,subtitle:'Бажана якість до '+profile.cap+'p · за наявності у джерела',key:key,selected:qualityProfile()===key};}).concat([{title:'Вибрати якість вручну',key:'custom'}]),'Профіль якості',function(row){
+   select(Object.keys(QUALITY_PROFILES).map(function(key){var profile=QUALITY_PROFILES[key];return {title:profile.title,subtitle:'Бажана '+profile.cap+'p · мінімум 720p',key:key,selected:qualityProfile()===key};}).concat([{title:'Вибрати якість вручну',key:'custom'}]),'Профіль якості',function(row){
     if(row.key==='custom')return choosePreferredQuality(comfortMenu);
     set('xot_quality_profile',row.key);set('video_quality_default',QUALITY_PROFILES[row.key].cap);updateFilter();if(!(Lampa.Player.opened&&Lampa.Player.opened()))refreshAfterPlayer();comfortMenu();
    },comfortMenu);
@@ -536,7 +581,7 @@ function registerScreen(){
     }
     return search(0).then(function(){if(found.length!==1)return null;return request(record.provider,'post',{id:found[0].id,path:found[0].path,movie:movie},operation.signal);}).then(function(data){
      if(!data||destroyed||profile!==watchProfile()||updatesController.signal.aborted)return;
-     var keys=seriesInventory((data.items||[]).filter(streamItem),record);if(!keys.length)return;
+     var keys=seriesInventory((data.items||[]).filter(function(item){return streamItem(item)&&hdCandidate(item);}),record);if(!keys.length)return;
      return checkEpisodeDates(record.card,keys,operation.signal).then(function(aired){if(destroyed||profile!==watchProfile()||operation.signal.aborted)return;var latest=trackedShows();storeTrackedShows(latest.map(function(row){return watchCardKey(row.card)===watchCardKey(record.card)&&row.provider===record.provider&&favoriteIdentity(row)===favoriteIdentity(record)?mergeSeriesCheck(row,aired):row;}));});
     }).catch(function(){}).then(function(){clearTimeout(timer);updatesController.signal.removeEventListener('abort',cancel);});
    }
@@ -628,6 +673,7 @@ function registerScreen(){
    if(group.status==='ambiguous')return 'Знайдено кілька збігів — потрібен ручний вибір';
    if(group.status==='ready')return 'Знайдено варіантів: '+(group.count||0);
    if(group.status==='open')return 'Знайдено озвучення; відео ще не перевірено';
+   if(group.reason==='hd')return 'Збіг є, підтвердженого відео від 720p немає';
    if(group.reason==='locked')return 'Збіг є, доступного відео немає';
    if(group.reason==='mismatch')return 'Результати не відповідають назві, року або типу картки';
    return 'Пошук не повернув підтвердженого збігу';
@@ -661,6 +707,7 @@ function registerScreen(){
    if(candidates.length>1)controls.push({title:'Вибрати інший збіг',action:'candidates'});
    var seasons=sourceId==='rezka'?episodeList.map(function(s){return s.season;}):Array.from(new Set(listedItems().map(function(s){return s.season;}).filter(Boolean))).sort(function(a,b){return a-b;});
    if(seasons.length)controls.push({title:'Сезон '+(season||seasons[0]),action:'season',seasons:seasons});
+   if(qualityButton)qualityButton.find('div').text(qualityPreference()+'p · HD');
    var options=voiceItems();
    if(options.length)controls.push({title:'Озвучення: '+(voice==='__uk__'?'українська · авто':sourceId==='rezka'?rezkaVoice&&rezkaVoice.title||'обрати':(options.filter(function(v){return v.id===voice;})[0]||{}).title||'усі'),action:'voice'});
    if(voiceButton){
@@ -748,11 +795,11 @@ function registerScreen(){
       group.data=data;
       if(which.id==='rezka'){group.status='open';}
       else{
-       var found=(data.items||[]).filter(streamItem).map(function(item){return Object.assign({},item,{provider:which.id,xot_source_name:which.title});});
+       var found=(data.items||[]).filter(function(item){return streamItem(item)&&hdCandidate(item);}).map(function(item){return Object.assign({},item,{provider:which.id,xot_source_name:which.title});});
        var locked=(data.unavailable||[]).map(function(item){return Object.assign({},item,{provider:which.id,xot_source_name:which.title,quality_cap:data.quality_cap});});
        streams=streams.concat(found);unavailable=unavailable.concat(locked);group.count=new Set(found.map(function(item){return [item.season,item.episode,voiceKey(item)].join('|');})).size;
        group.status=found.length?'ready':'empty';
-       if(!found.length&&locked.length)group.reason='locked';
+       if(!found.length)group.reason=(data.items||[]).length?'hd':locked.length?'locked':group.reason;
       }
      }
      refreshAggregate();
@@ -769,7 +816,7 @@ function registerScreen(){
    searchSource(which,operation).then(function(data){
     if(!current(operation.token))return;finish();
     Object.assign(singleDiagnostic,data.search||{});
-    if(data.catalog){streams=data.catalog.filter(function(x){return media(x.url);});singleDiagnostic.status=streams.length?'ready':'empty';singleDiagnostic.count=streams.length;state='streams';drawStreams();return;}
+    if(data.catalog){streams=data.catalog.filter(function(x){return media(x.url)&&hdCandidate(x);});singleDiagnostic.status=streams.length?'ready':'empty';singleDiagnostic.count=streams.length;state='streams';drawStreams();return;}
     candidates=data.candidates;var exact=candidates.filter(function(item){return matches(item,card);});
     rememberAliases(which,exact);
     if(exact.length===1)return openPost(exact[0]);
@@ -781,7 +828,7 @@ function registerScreen(){
    if(singleDiagnostic){singleDiagnostic.status='loading';singleDiagnostic.phase='post';}
    request(sourceId,'post',postPayload(item,source()),operation.signal).then(function(data){
     if(!current(operation.token))return;finish();post=data;post.title=data.title||item.title;
-    if(sourceId!=='rezka'){streams=(data.items||[]).filter(streamItem);unavailable=data.unavailable||[];qualityCap=data.quality_cap||null;if(singleDiagnostic){singleDiagnostic.status=streams.length?'ready':'empty';singleDiagnostic.count=displayGroups(streams,false).length;if(!streams.length&&unavailable.length)singleDiagnostic.reason='locked';}restoreVoice();state='streams';drawStreams();}
+    if(sourceId!=='rezka'){streams=(data.items||[]).filter(function(item){return streamItem(item)&&hdCandidate(item);});unavailable=data.unavailable||[];qualityCap=data.quality_cap||null;if(singleDiagnostic){singleDiagnostic.status=streams.length?'ready':'empty';singleDiagnostic.count=displayGroups(streams,false).length;if(!streams.length)singleDiagnostic.reason=(data.items||[]).length?'hd':unavailable.length?'locked':singleDiagnostic.reason;}restoreVoice();state='streams';drawStreams();}
     else{
      if(singleDiagnostic)singleDiagnostic.status='open';
      var preferences=get('xot_native_voices',{}),saved=preferences[voicePreferenceKey()],options=data.translations||[],explicitAll=!data.series&&Object.prototype.hasOwnProperty.call(preferences,voicePreferenceKey())&&saved===null;
@@ -831,21 +878,22 @@ function registerScreen(){
    var seasons=Array.from(new Set(listedItems().map(function(s){return s.season;}).filter(Boolean))).sort(function(a,b){return a-b;});
    if(seasons.length&&!seasons.includes(season))season=seasons[0];
    if(voice&&voice!=='__uk__'&&!voiceItems().some(function(v){return v.id===voice;}))restoreVoice();
-   var scoped=streams.filter(function(item){return (!seasons.length||item.season===season)&&(!voice||voice==='__uk__'?(!voice||ukrainian(item)):selectionVoice(item)===voice);});
+   var scoped=streams.filter(function(item){return hdCandidate(item)&&(!seasons.length||item.season===season)&&(!voice||voice==='__uk__'?(!voice||ukrainian(item)):selectionVoice(item)===voice);});
    var order=orderedSources(sources).map(function(s){return s.id;});
    scoped.sort(function(a,b){return order.indexOf(a.provider)-order.indexOf(b.provider)||(a.season||0)-(b.season||0)||(a.episode||0)-(b.episode||0);});
    var groups=rankedGroups(displayGroups(scoped,sourceId==='all'),order);
-   var locked=sourceId==='all'?[]:unavailable.filter(function(item){return (!seasons.length||item.season===season)&&(!voice||voice==='__uk__'?(!voice||ukrainian(item)):selectionVoice(item)===voice);});
+   var locked=[];
    var pending=sourceId==='all'&&allGroups.some(function(g){return g.status==='loading';});
    var opened=sourceId==='all'?allGroups.filter(function(group){return group.status==='open'&&group.data&&group.data.translations&&group.data.translations.length;}):[];
    appendContinue();
    if(!groups.length&&!locked.length&&!opened.length){
     if(pending)line('Шукаємо джерела…','Знайдені варіанти з’являтимуться тут.');
-    else if(sourceId==='all'&&!streams.length){line('Доступних джерел не знайдено',orderedSources(sources).length>1?'Спробуй повторити пошук або вибрати балансер угорі.':'Увімкни джерела у Фільтр → Налаштування балансерів.');line('Повторити пошук','',retrySearch);}
-    else line('Немає доступних потоків','Спробуй інший балансер, сезон або озвучення.');
+    else if(sourceId==='all'&&!streams.length){line('Відео від 720p не знайдено',orderedSources(sources).length>1?'Спробуй повторити пошук або вибрати балансер угорі.':'Увімкни джерела у Фільтр → Налаштування балансерів.');line('Повторити пошук','',retrySearch);}
+    else line('Немає відео від 720p','Обери інше озвучення, сезон або балансер.');
    }
    groups.forEach(function(group){var items=group.items,first=items[0],qualities=items.reduce(function(all,x){return all.concat(x.available_qualities||[x.quality]);},[]).filter(function(v,i,a){return a.indexOf(v)===i;});
-    watchRow(line((sourceId==='all'?group.names.join(' / ')+' · ':'')+(first.episode?'Серія '+first.episode+' · ':'')+(first.translation||'Оригінал'),qualities.join(' · '),function(){playGroup(items);},true),first);
+    var row=watchRow(line((sourceId==='all'?group.names.join(' / ')+' · ':'')+(first.episode?'Серія '+first.episode+' · ':'')+(first.translation||'Оригінал'),qualityNote(items),function(){playGroup(items);},true),first);
+    row.addClass('xot-hd-row');$('<span class="xot-quality-badge"></span>').text(knownHD(first)?qualityNote(items).split(' · ')[0]:'HD ?').appendTo(row);
    });
    locked.forEach(function(item){
     var note=item.reason==='quality_limit'?'У API є лише '+(item.available_qualities||[]).join(', ')+'. Поточний ліміт якості — '+(item.quality_cap||qualityCap)+'p.':'Для цього озвучення API не повернув придатного HTTPS-потоку.';
@@ -1016,13 +1064,13 @@ function registerScreen(){
   function qualityPreference(){return qualityLimit();}
   function choosePreferredQuality(back){
    back=typeof back==='function'?back:self.start;
-   select([2160,1440,1080,720,480].map(function(q){return {title:q+'p',value:q,selected:q===qualityPreference()};}),'Бажана якість',function(item){set('xot_quality_profile','custom');set('video_quality_default',item.value);updateFilter();watchNotice('Якість збережено: '+item.value+'p');back();},back);
+   select([2160,1440,1080,720].map(function(q){return {title:q+'p',value:q,selected:q===qualityPreference()};}),'Бажана якість',function(item){set('xot_quality_profile','custom');set('video_quality_default',item.value);updateFilter();watchNotice('Якість збережено: '+item.value+'p');back();},back);
   }
   function playerData(){try{return Lampa.Player.playdata&&Lampa.Player.playdata();}catch(e){return null;}}
   function onPlayerQuality(event){
    var data=playerData();if(!data||data.xot_owner!==owner)return;
    var value=/^\d+p?$/i.test(event.name)?parseInt(event.name):null;
-   if(value!==null&&[480,720,1080,1440,2160].includes(value)){set('xot_quality_profile','custom');set('video_quality_default',value);delete data.xot_backup_declined;armStartup(data);updateFilter();}
+   if(value!==null&&[720,1080,1440,2160].includes(value)){set('xot_quality_profile','custom');set('video_quality_default',value);delete data.xot_backup_declined;armStartup(data);updateFilter();}
   }
   function onPlayerCreate(event){
    var data=event.data;if(!data||data.xot_owner!==owner||!data.quality)return;
@@ -1123,7 +1171,7 @@ function registerScreen(){
      return request(which.id,'post',postPayload(exact[0],which,true),operation.signal);
     }).then(function(data){
      if(!data||!backupValid(context)||context.shown)return;
-     var inventory=(data.items||[]).filter(streamItem).map(function(row){return Object.assign({},row,{provider:which.id,xot_source_name:which.title});});
+     var inventory=(data.items||[]).filter(function(item){return streamItem(item)&&hdCandidate(item);}).map(function(row){return Object.assign({},row,{provider:which.id,xot_source_name:which.title});});
      backupGroups(inventory,item,failedFamilies).forEach(function(group){context.choices.push({source:which,data:data,inventory:inventory,items:group});});
     });
    })).then(showChoices);
@@ -1153,7 +1201,7 @@ function registerScreen(){
   }
   function playable(items,resume){
    var selected=chooseQuality(items,qualityPreference()),item=items[0];
-   if(!selected.url)throw Error('eneyida_stream_unavailable');
+   if(!selected.url)throw Error('hd_unavailable');
    var verified=source().kind==='catalog'?matches(item,card):postVerified,mark=verified?timeline(item):null,originalMark=mark;
    if(resume>0&&mark)mark=Object.assign({},mark,{time:resume,percent:0,continued:false});
    var play=Object.assign(selected,{title:title(card)+' / '+(item.translation||'Оригінал')+(item.episode?' / '+item.season+'×'+item.episode:''),season:item.season,episode:item.episode,card:card,isonline:true,timeline:mark,xot_owner:owner,xot_source:item.provider||sourceId,xot_item:item,xot_verified:verified,xot_profile:watchProfile(),xot_resume:resume||0,error:function(work){offerBackup(work);}});
@@ -1173,9 +1221,13 @@ function registerScreen(){
    else load=request(which,'stream',Object.assign({},first,{subtitles:undefined,subtitle:undefined}),task.controller.signal);
    load.then(function(data){
     if(!valid())return;
-    var resolved=(data.items||[]).filter(function(item){return media(item.url)&&!item.needs_resolve;}).map(function(item){return Object.assign({},item,{provider:which,xot_source_name:first.xot_source_name,subtitles:item.subtitles||first.subtitles||first.subtitle});});
-    if(!resolved.length)throw Error('eneyida_stream_unavailable');
-    if(loading&&which!=='rezka')streams=streams.filter(function(item){return !(item.provider===first.provider&&item.url===first.url&&item.season===first.season&&item.episode===first.episode&&voiceKey(item)===voiceKey(first));}).concat(resolved);
+    return verifyHD((data.items||[]).filter(function(item){return media(item.url)&&!item.needs_resolve;}),task.controller.signal);
+   }).then(function(verifiedItems){
+    if(!valid())return;
+    var data={items:verifiedItems};
+    var resolved=(data.items||[]).filter(function(item){return media(item.url)&&!item.needs_resolve;}).map(function(item){return Object.assign({},first,item,{provider:which,needs_resolve:false,xot_source_name:first.xot_source_name,subtitles:item.subtitles||first.subtitles||first.subtitle});});
+    if(!resolved.length)throw Error('hd_unavailable');
+    if(loading&&which!=='rezka')streams=streams.filter(function(item){return !(item.provider===first.provider&&(item.url||item.resolve_url)===(first.url||first.resolve_url)&&item.season===first.season&&item.episode===first.episode&&voiceKey(item)===voiceKey(first));}).concat(resolved);
     finishTask();try{done(resolved);}catch(error){fail(error);}
    }).catch(function(error){if(valid()){finishTask();fail(error);}});
   }
@@ -1185,7 +1237,7 @@ function registerScreen(){
    if(!destroyed){if(sourceId==='rezka'){if(post.series)drawEpisodes();else drawRezkaVoices();}else drawStreams();notify(readableError(error));}
   }
   function playlistFor(items,play){
-   var first=items[0],inventory=streams;
+   var first=items[0],inventory=streams.filter(hdCandidate);
    if(first.provider==='rezka'&&first.episode&&rezkaVoice)inventory=episodeList.reduce(function(list,group){return list.concat(group.episodes.map(function(n){return {provider:'rezka',title:post.title,translation:rezkaVoice.title,voice_id:rezkaVoice.id,season:group.season,episode:n,needs_resolve:true,xot_rezka_voice:rezkaVoice,xot_post_id:post.id,xot_rezka_path:post.path};}));},[]);
    var groups=first.episode?episodeGroups(inventory.filter(function(item){return !futureEpisode(episodeInfo(item));}),first):[];
    if(!groups.length)return [play];
@@ -1238,6 +1290,8 @@ function registerScreen(){
   this.create=function(){
    if(created)return self.render();created=true;
    scroll.body().addClass('torrent-list');files.appendHead(filter.render());files.appendFiles(scroll.render());scroll.minus(files.render().find('.explorer__files-head'));
+   qualityButton=$('<div class="simple-button simple-button--filter selector xot--quality"><span>Якість</span><div></div></div>');
+   bind(qualityButton,function(){choosePreferredQuality();});filter.render().find('.filter--filter').before(qualityButton);
    voiceButton=$('<div class="simple-button simple-button--filter selector xot--voice"><span>Озвучення</span><div></div></div>');
    voiceButton.insertBefore(filter.render().find('.filter--filter'));
    if(Lampa.PlayerPanel&&Lampa.PlayerPanel.listener)Lampa.PlayerPanel.listener.follow('quality',onPlayerQuality);
@@ -1332,7 +1386,7 @@ function button(event){
 }
 if(!registerScreen())return;
 window.__XOT_ONLINE_INITIALIZED__=true;
-var style=document.createElement('style');style.textContent='.xot--voice>div{max-width:14em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.xot-native-row,.xot-continue-row,.xot-next-row{position:relative;padding:1.05em 1.2em;margin:.4em 0;border-radius:.4em;background:rgba(255,255,255,.055)}.xot-native-row__title{font-size:1.28em;line-height:1.35}.xot-native-row__note{opacity:.65;margin-top:.35em;font-size:.9em}.xot-native-row.focus,.xot-continue-row.focus,.xot-next-row.focus{outline:.18em solid #fff;background:rgba(255,255,255,.1)}.xot-updates-count{display:inline-block;font-size:.65em;line-height:1.5;min-width:1.5em;text-align:center;margin-left:.6em;border:1px solid rgba(255,255,255,.3);border-radius:1em;opacity:.8}.xot-episode-meta{font-size:.82em;opacity:.65;margin-top:.4em;line-height:1.35}.xot-watch-status{font-size:.82em;opacity:.65;margin-top:.5em}.xot-watch-progress.time-line{position:relative;inset:auto;height:.18em;margin-top:.65em;border-radius:.2em;overflow:hidden;background:rgba(255,255,255,.12)}.xot-watch-progress>div{height:100%;background:rgba(255,255,255,.65)}.xot-continue-row,.xot-next-row{background:rgba(255,255,255,.075);border-left:.16em solid rgba(255,255,255,.3);margin-bottom:.8em}.xot-watch-notice{position:fixed;right:2em;bottom:2em;max-width:30em;padding:.9em 1.1em;border-radius:.4em;border:1px solid rgba(255,255,255,.15);background:rgba(30,30,30,.94);color:#eee;font-size:.9em;line-height:1.4;z-index:200;pointer-events:none}.xot-watch-editable{padding-right:2.5em}.xot-watch-editable.focus:after{content:"⋯";position:absolute;right:.7em;top:.7em;opacity:.55;font-size:1.2em}';document.head.appendChild(style);
+var style=document.createElement('style');style.textContent='.xot-hd-row{padding-right:5.6em!important}.xot-quality-badge{position:absolute;right:1em;top:1.3em;padding:.2em .45em;border:1px solid rgba(255,255,255,.2);border-radius:.25em;opacity:.7;font-size:.72em;letter-spacing:.02em}.xot--quality>div{white-space:nowrap}@media(max-width:700px){.xot-native-row__title{font-size:1.05em!important}.xot--voice>div{max-width:9em!important}.xot-quality-badge{top:1.5em}}.xot--voice>div{max-width:14em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.xot-native-row,.xot-continue-row,.xot-next-row{position:relative;padding:1.05em 1.2em;margin:.4em 0;border-radius:.4em;background:rgba(255,255,255,.055)}.xot-native-row__title{font-size:1.28em;line-height:1.35}.xot-native-row__note{opacity:.65;margin-top:.35em;font-size:.9em}.xot-native-row.focus,.xot-continue-row.focus,.xot-next-row.focus{outline:.18em solid #fff;background:rgba(255,255,255,.1)}.xot-updates-count{display:inline-block;font-size:.65em;line-height:1.5;min-width:1.5em;text-align:center;margin-left:.6em;border:1px solid rgba(255,255,255,.3);border-radius:1em;opacity:.8}.xot-episode-meta{font-size:.82em;opacity:.65;margin-top:.4em;line-height:1.35}.xot-watch-status{font-size:.82em;opacity:.65;margin-top:.5em}.xot-watch-progress.time-line{position:relative;inset:auto;height:.18em;margin-top:.65em;border-radius:.2em;overflow:hidden;background:rgba(255,255,255,.12)}.xot-watch-progress>div{height:100%;background:rgba(255,255,255,.65)}.xot-continue-row,.xot-next-row{background:rgba(255,255,255,.075);border-left:.16em solid rgba(255,255,255,.3);margin-bottom:.8em}.xot-watch-notice{position:fixed;right:2em;bottom:2em;max-width:30em;padding:.9em 1.1em;border-radius:.4em;border:1px solid rgba(255,255,255,.15);background:rgba(30,30,30,.94);color:#eee;font-size:.9em;line-height:1.4;z-index:200;pointer-events:none}.xot-watch-editable{padding-right:2.5em}.xot-watch-editable.focus:after{content:"⋯";position:absolute;right:.7em;top:.7em;opacity:.55;font-size:1.2em}';document.head.appendChild(style);
 Lampa.Listener.follow('full',function(e){if(e&&['complite','complete','render'].indexOf(e.type)>=0){buttonTimers.forEach(clearTimeout);buttonTimers=[setTimeout(function(){button(e);},0),setTimeout(function(){button(e);},350),setTimeout(function(){button(e);},1500)];}});
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',function(){setTimeout(button,300);},{once:true});else setTimeout(button,300);
 console.info('[XOT] Independent balancers '+VERSION);
