@@ -5,7 +5,7 @@ import {handleEneyida} from './eneyida.js';
 import {handleUkrainian} from './ukrainian.js';
 import {handleUFDub} from './ufdub.js';
 import {handleSerialno} from './serialno.js';
-import {forwardNative,forwardRezka} from './backend.js';
+import {forwardNative,forwardRezka,rezkaStatus} from './backend.js';
 import {handleHDPlaylist} from './hd-playlist.js';
 import {handleKinostrain} from './kinostrain.js';
 import {providers,normalize} from './providers.js';
@@ -23,6 +23,7 @@ function getQuery(url){return {title:(url.searchParams.get('title')||'').trim(),
 function check(q){return ((q.title && q.title.length<=200)||/^\d{1,12}$/.test(q.tmdb_id))&&(!q.year||/^\d{4}$/.test(q.year));}
 export default {async fetch(request,env){
  const url=new URL(request.url);
+ if(url.pathname==='/api/rezka/status')return rezkaStatus(request,env);
  if(url.pathname==='/api/hd.m3u8')return handleHDPlaylist(request);
  if(url.pathname==='/api/kinostrain')return handleKinostrain(request);
  if(url.pathname==='/api/rezka'&&request.method==='POST'&&env.XOT_REZKA_BACKEND_URL){

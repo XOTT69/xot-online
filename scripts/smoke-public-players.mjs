@@ -35,8 +35,9 @@ try{
  }
  await openCard({id:460458,title:'Оселя зла: Вітаємо у Раккун-Сіті',original_title:'Resident Evil: Welcome to Raccoon City',release_date:'2021-11-24',imdb_id:'tt6920084',source:'tmdb',vote_average:5.9});
  await page.evaluate(()=>$('.filter--sort').trigger('hover:enter'));
+ if(!await page.evaluate(sourceName=>$('.selectbox').text().includes(sourceName),sourceName))await page.evaluate(()=>$('.selectbox .selector').filter(function(){return $(this).text().includes('Показати всі джерела');}).first().trigger('hover:enter'));
  await page.waitForFunction(sourceName=>$('.selectbox').text().includes(sourceName),sourceName);
- await page.evaluate(sourceName=>$('.selectbox .selector').filter(function(){return $(this).text().trim()===sourceName;}).first().trigger('hover:enter'),sourceName);
+ await page.evaluate(sourceName=>$('.selectbox .selector').filter(function(){return $(this).text().trim()===sourceName||$(this).find('.selectbox-item__title').text().trim()===sourceName;}).first().trigger('hover:enter'),sourceName);
  await page.waitForFunction(sourceId=>Lampa.Storage.get('xot_native_source')===sourceId&&$('.xot-native-row.selector').length>0&&$('.xot-native-row__note').text().includes('1080p'),sourceId,{timeout:30000});
  const movieRows=await page.evaluate(()=>$('.xot-native-row').map(function(){return {title:$(this).find('.xot-native-row__title').text(),note:$(this).find('.xot-native-row__note').text()};}).get());
  assert.equal(movieRows.length,1);
@@ -47,7 +48,7 @@ try{
   await page.waitForFunction(()=>[...document.querySelectorAll('video')].some(v=>v.currentTime>1&&!v.paused&&!v.error),{timeout:30000});
   const state=await page.evaluate(()=>{
    const video=[...document.querySelectorAll('video')].find(v=>v.currentTime>1&&!v.paused&&!v.error),play=window.xotPlayed.at(-1);
-   return {width:video.videoWidth,height:video.videoHeight,duration:video.duration,time:video.currentTime,selectedURL:play.url,qualities:Object.keys(play.quality),error:video.error?.code||null};
+   return {width:video.videoWidth,height:video.videoHeight,duration:video.duration,time:video.currentTime,selectedURL:play.url,qualities:Object.keys(play.quality||{[play.xot_item.quality]:play.url}),error:video.error?.code||null};
   });
   assert.deepEqual(state.qualities.sort(),['1080p','720p']);assert.equal(state.width,quality===720?1280:1920);assert.ok(state.duration>6000);assert.equal(state.error,null);
   playback.push({requestedQuality:quality,...state});
@@ -72,7 +73,7 @@ try{
  await page.waitForFunction(()=>!$('body').hasClass('selectbox--open')&&$('.xot-native-row.selector').length>0);
  await page.evaluate(()=>$('.xot-native-row.selector').first().trigger('hover:enter'));
  await page.waitForFunction(()=>[...document.querySelectorAll('video')].some(v=>v.currentTime>1&&!v.paused&&!v.error),{timeout:30000});
- const episode=await page.evaluate(()=>{const play=window.xotPlayed.at(-1);return {season:play.season,episode:play.episode,qualities:Object.keys(play.quality),title:play.title};});
+ const episode=await page.evaluate(()=>{const play=window.xotPlayed.at(-1);return {season:play.season,episode:play.episode,qualities:Object.keys(play.quality||{[play.xot_item.quality]:play.url}),title:play.title};});
  assert.equal(streamRequests.length,1);assert.equal(streamRequests[0].season,2);assert.equal(episode.season,2);assert.equal(episode.episode,1);assert.ok(episode.qualities.includes('720p'));
  assert.deepEqual(exceptions,[]);assert.equal(forbidden.length,0);
  console.log(JSON.stringify({origin,source:sourceId,movieRows,playback,series:{seasonOneRows:seasonOne,resolvedEpisodes:streamRequests.length,played:episode},thirdPartyScripts:forbidden.length,exceptions},null,2));

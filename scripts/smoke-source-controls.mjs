@@ -6,10 +6,12 @@ import {serveLocalAssets} from './smoke-assets.mjs';
 const origin=process.env.XOT_TEST_ORIGIN||'https://xot-online.ai-beta69690.workers.dev';
 const browser=await chromium.launch({headless:true,...(process.env.PLAYWRIGHT_EXECUTABLE_PATH?{executablePath:process.env.PLAYWRIGHT_EXECUTABLE_PATH}:{})});
 try{
+ let statusCalls=0;
  const page=await browser.newPage({viewport:{width:1500,height:900}}),exceptions=[],calls=[],forbidden=[];
  await serveLocalAssets(page,origin);
  page.on('pageerror',e=>exceptions.push(e.message));
  page.on('request',r=>{if(/\/api\/anilibria|\/lumio\.js|online_mod/.test(r.url()))forbidden.push(r.url());});
+ await page.route(origin+'/api/rezka/status',r=>{statusCalls++;return r.fulfill({json:{configured:true,state:'ready'}});});
  await page.route(origin+'/api/providers',r=>r.fulfill({json:{providers:[]}}));
  for(const provider of ['eneyida','uaserials','kinovezha','filmix','ufdub','rezka','serialno','kinostrain'])await page.route(origin+'/api/'+provider,async route=>{
   const body=route.request().postDataJSON();calls.push({provider,action:body.action});
@@ -29,11 +31,11 @@ try{
  await page.addScriptTag({url:origin+'/m.js'});await page.waitForFunction(()=>window.__XOT_ONLINE_INITIALIZED__);
  const card={id:990012,title:'Перевірка джерел',original_title:'Source Control Fixture',release_date:'2022-01-01',source:'tmdb'};
  async function choose(text,contains=false){
-  await page.waitForFunction(({text,contains})=>$('.selectbox .selector').filter(function(){return contains?$(this).text().includes(text):$(this).text().trim()===text;}).length>0,{text,contains});
-  await page.evaluate(({text,contains})=>$('.selectbox .selector').filter(function(){return contains?$(this).text().includes(text):$(this).text().trim()===text;}).first().trigger('hover:enter'),{text,contains});
+  await page.waitForFunction(({text,contains})=>$('.selectbox .selector').filter(function(){return contains?$(this).text().includes(text):$(this).text().trim()===text||$(this).find('.selectbox-item__title').text().trim()===text;}).length>0,{text,contains});
+  await page.evaluate(({text,contains})=>$('.selectbox .selector').filter(function(){return contains?$(this).text().includes(text):$(this).text().trim()===text||$(this).find('.selectbox-item__title').text().trim()===text;}).first().trigger('hover:enter'),{text,contains});
  }
- async function filter(text){await page.evaluate(()=>$('.filter--filter').trigger('hover:enter'));await choose(text);}
- async function source(text){await page.evaluate(()=>$('.filter--sort').trigger('hover:enter'));await choose(text);}
+ async function filter(text){await page.evaluate(()=>$('.filter--filter').trigger('hover:enter'));if(!await page.evaluate(text=>$('.selectbox .selector').text().includes(text),text))await choose('Налаштування ХОТ');await choose(text);}
+ async function source(text){await page.evaluate(()=>$('.filter--sort').trigger('hover:enter'));if(!await page.evaluate(text=>$('.selectbox .selector').text().includes(text),text))await choose('Показати всі джерела');await choose(text,true);}
  async function ready(){await page.waitForFunction(()=>$('.xot-native-row.selector').length===2&&$('.xot-native-row').text().includes('Студія Б'));await page.waitForTimeout(150);}
  function count(provider,action='search'){return calls.filter(c=>c.provider===provider&&c.action===action).length;}
  await page.evaluate(card=>Lampa.Listener.send('full',{type:'complite',data:{movie:card},object:{activity:{render:()=>$('body')}}}),card);
@@ -46,7 +48,7 @@ try{
  assert.ok(!initialPicker.some(t=>/AniLibria|аніме|UFDub/.test(t)));await page.evaluate(()=>Lampa.Select.close());
  await filter('Діагностика пошуку');
  const diagnostics=await page.evaluate(()=>$('.selectbox').text());
- for(const fragment of ['KinoVezha обмежила доступ','Filmix · Пошук не повернув','Serialno · серіали · Джерело лише для серіалів','UFDub · Вимкнено','HDRezka · Пошук не повернув'])assert.ok(diagnostics.includes(fragment),fragment);
+ for(const fragment of ['KinoVezha обмежила доступ','Serialno · серіали · Джерело лише для серіалів','UFDub · Вимкнено','HDRezka · Пошук не повернув'])assert.ok(diagnostics.includes(fragment),fragment);
  assert.ok(!diagnostics.includes('AniLibria'));await page.evaluate(()=>Lampa.Select.close());
  await source('Serialno · серіали');await page.waitForFunction(()=>$('.xot-native-row').text().includes('лише серіали'));assert.equal(count('serialno'),0);await source('Усі джерела');await ready();
  // Cached search cannot cache video addresses: every post remains a fresh request.
@@ -66,7 +68,7 @@ try{
  assert.equal(await page.evaluate(()=>$('.xot-native-row.selector').first().text().includes('UASerials / Eneyida')),true);
  await page.evaluate(()=>$('.filter--sort').trigger('hover:enter'));
  const changedPicker=await page.evaluate(()=>$('.selectbox .selector').map(function(){return $(this).text().trim();}).get());
- assert.equal(changedPicker[1],'UASerials');assert.ok(changedPicker.includes('UFDub'));assert.ok(!changedPicker.includes('KinoVezha'));await page.evaluate(()=>Lampa.Select.close());
+ assert.ok(changedPicker[1].startsWith('UASerials'));assert.ok(changedPicker.includes('Показати всі джерела'));assert.ok(!changedPicker.some(v=>v.startsWith('UFDub')));assert.ok(!changedPicker.includes('KinoVezha'));await page.evaluate(()=>Lampa.Select.close());
  const cachedBefore=count('eneyida');await filter('Діагностика пошуку');await choose('Повторити пошук без кешу');await ready();assert.equal(count('eneyida'),cachedBefore+2);assert.equal(count('kinovezha'),failedBefore);
  // Specific voice choices stay available after a cross-catalog row was merged.
  await page.evaluate(()=>$('.xot--voice').trigger('hover:enter'));await choose('Eneyida · Українська · Студія Б');
@@ -79,8 +81,21 @@ try{
  await page.waitForFunction(()=>$('.xot-native-row').text().includes('Увімкни джерела'));assert.equal(calls.length,disabledCount);
  await filter('Налаштування балансерів');await choose('Відновити початковий порядок і вибір');await choose('Готово');await ready();
  const preferences=await page.evaluate(()=>Lampa.Storage.get('xot_source_preferences'));assert.deepEqual(preferences.disabled,['ufdub']);
+ // New movie has one explicit HD action; opening the screen never starts a player.
+ assert.equal(await page.locator('.xot-watch-now').count(),1);assert.ok((await page.locator('.xot-watch-now').innerText()).includes('1080p'));assert.equal(await page.evaluate(()=>Lampa.Player.opened()),false);
+ await page.evaluate(()=>$('.filter--filter').trigger('hover:enter'));
+ const shortFilter=await page.evaluate(()=>$('.selectbox .selector').map(function(){return $(this).text().trim();}).get());assert.ok(shortFilter.length<=4);assert.ok(!shortFilter.some(t=>t.includes('Діагностика')));
+ // Use physical keyboard events with Lampa's native focus/Back controller.
+ await page.evaluate(()=>Lampa.Controller.collectionFocus($('.selectbox .selector').filter(function(){return $(this).text().includes('Налаштування ХОТ');})[0],$('.selectbox')));
+ await page.keyboard.press('Enter');await page.waitForFunction(()=>$('.selectbox').text().includes('Підключення та перевірка ТВ'));
+ const beforeFocus=await page.evaluate(()=>$('.selectbox .focus').text());await page.keyboard.press('ArrowDown');assert.notEqual(await page.evaluate(()=>$('.selectbox .focus').text()),beforeFocus);
+ await choose('Підключення та перевірка ТВ');assert.equal(statusCalls,0);await page.waitForTimeout(300);assert.equal(statusCalls,0,'Status checks happen only on an explicit click');
+ await choose('HDRezka',true);await page.waitForFunction(()=>$('.selectbox').text().includes('Сервер відповідає'));assert.equal(statusCalls,1);
+ await page.keyboard.press('Escape');await page.waitForFunction(()=>$('.selectbox').text().includes('Улюблені озвучення'));
+ await page.keyboard.press('Escape');await page.waitForFunction(()=>!$('body').hasClass('selectbox--open'));
+ if(process.env.XOT_SCREENSHOT){await page.waitForTimeout(500);await page.screenshot({path:process.env.XOT_SCREENSHOT});}
  assert.deepEqual(forbidden,[]);assert.deepEqual(exceptions,[]);
- console.log(JSON.stringify({origin,defaultSource:'all',initialPicker,changedPicker,mergedRows:2,voicesPreserved:true,searchCacheHit:true,postsRemainFresh:true,explicitRetryBypassesCache:true,settingsAppliedOnce:true,allDisabledRecovery:true,noAnimeRequests:true,requests:calls.length,exceptions},null,2));
+ console.log(JSON.stringify({origin,defaultSource:'all',initialPicker,changedPicker,mergedRows:2,voicesPreserved:true,searchCacheHit:true,postsRemainFresh:true,explicitRetryBypassesCache:true,settingsAppliedOnce:true,allDisabledRecovery:true,noAnimeRequests:true,oneExplicitWatchAction:true,shortFilter,nativeKeyboardNavigation:true,manualStatusOnly:true,requests:calls.length,exceptions},null,2));
 }catch(error){
  console.error(error);for(const page of browser.contexts().flatMap(c=>c.pages()))console.error(await page.evaluate(()=>({rows:window.jQuery?$('.xot-native-row').text():null,select:window.jQuery?$('.selectbox').text():null,activity:window.Lampa?.Activity?.active()?.component})).catch(()=>({})));throw error;
 }finally{await browser.close();}

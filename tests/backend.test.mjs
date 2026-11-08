@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {once} from 'node:events';
 import {createBackend} from '../server/index.mjs';
-import {forwardNative,forwardRezka} from '../worker/backend.js';
+import {forwardNative,forwardRezka,rezkaStatus} from '../worker/backend.js';
 import worker from '../worker/index.js';
 const secret='xot-test-private-token-at-least-32-characters';
 
@@ -66,4 +66,14 @@ test('A Rezka backend never redirects Filmix and other APIs away from their exis
   const filmix=await worker.fetch(new Request('https://xot.test/api/filmix',{method:'POST',body:JSON.stringify({action:'invalid'})}),env);assert.equal(filmix.status,400);assert.equal(calls.length,0);
   assert.equal((await worker.fetch(rezkaRequest(),env)).status,200);assert.deepEqual(calls.map(c=>new URL(c.url).pathname),['/healthz','/api/rezka']);
  }finally{globalThis.fetch=old;}
+});
+
+
+test('Manual Rezka status makes one health request, sends no secret and does not claim video readiness',async()=>{
+ let calls=0;const request=new Request('https://xot.test/api/rezka/status');
+ const ready=await rezkaStatus(request,rezkaEnv,async(url,options)=>{calls++;assert.equal(String(url),'https://api.example.com/healthz');assert.equal(options.headers,undefined);assert.equal(options.redirect,'manual');return Response.json({ok:true,token:'must-not-leak'});});
+ assert.deepEqual(await ready.json(),{configured:true,state:'ready'});assert.equal(calls,1);
+ const starting=await rezkaStatus(request,rezkaEnv,async()=>new Response('Starting',{status:503}));assert.equal((await starting.json()).state,'starting');
+ const redirect=await rezkaStatus(request,rezkaEnv,async()=>new Response('',{status:302,headers:{location:'https://elsewhere.test'}}));assert.equal((await redirect.json()).state,'unavailable');
+ const absent=await rezkaStatus(request,{},()=>{throw Error('must not fetch');});assert.deepEqual(await absent.json(),{configured:false,state:'unavailable'});
 });

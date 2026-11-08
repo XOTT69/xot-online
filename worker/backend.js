@@ -55,3 +55,19 @@ export async function forwardRezka(request,env,{fetcher=fetch,wait=pause}={}){
  }
  throw Error('backend_unavailable');
 }
+
+// One explicit status click, one bounded unauthenticated health request.
+// This says nothing about a particular title or video and never keeps a host awake.
+export async function rezkaStatus(request,env,fetcher=fetch){
+ if(request.method!=='GET')return Response.json({error:'method_not_allowed'},{status:405,headers});
+ let origin;try{origin=backendOrigin(env.XOT_REZKA_BACKEND_URL,env.XOT_REZKA_BACKEND_TOKEN);}catch{return Response.json({configured:false,state:'unavailable'},{headers});}
+ let state='unavailable';
+ try{
+  const response=await fetcher(new URL('/healthz',origin),{redirect:'manual',signal:AbortSignal.any([request.signal,AbortSignal.timeout(8000)])});
+  const reader=response.body?.getReader();let body='',size=0;const decoder=new TextDecoder();
+  if(reader)try{while(true){const {done,value}=await reader.read();if(done)break;size+=value.byteLength;if(size>65536)throw Error('too_large');body+=decoder.decode(value,{stream:true});}body+=decoder.decode();}finally{await reader.cancel();}
+  if(response.ok){try{if(JSON.parse(body)?.ok===true)state='ready';}catch{if(/render|starting|loading/i.test(body))state='starting';}}
+  else if([502,503,504].includes(response.status))state='starting';
+ }catch(error){if(/timeout/i.test(error?.name||''))state='starting';}
+ return Response.json({configured:true,state},{headers});
+}

@@ -32,7 +32,7 @@ function harness({card=movie,ready=true,stored={},early=false,expose=false}={}) 
  context.window=context;
  if(early)delete context.Lampa;
  function advance(ms){const end=now+ms;let count=0;while(true){const due=[...timers].filter(([,v])=>v.at<=end).sort((a,b)=>a[1].at-b[1].at)[0];if(!due)break;if(++count>1000)throw Error('timer loop');now=due[1].at;timers.delete(due[0]);due[1].fn();}now=end;}
- function boot(){const code=expose?plugin.replace(/\}\)\(\);\s*$/, 'window.__testMatching={matches:matches,names:names,get:get,voiceKey:voiceKey,ukrainian:ukrainian,chooseQuality:chooseQuality,knownHD:knownHD,decodedSD:decodedSD,hdCandidate:hdCandidate,verifyHD:verifyHD,qualityNote:qualityNote,episodeGroups:episodeGroups,backupGroups:backupGroups,deliveryFamily:deliveryFamily,streamItem:streamItem,sourcePreferences:sourcePreferences,sourceSearchOperation:sourceSearchOperation,sourceEnabled:sourceEnabled,orderedSources:orderedSources,preferredSource:preferredSource,displayGroups:displayGroups,cachedSearch:cachedSearch,favoriteIdentity:favoriteIdentity,favoriteVoices:favoriteVoices,favoriteVoice:favoriteVoice,watchCardKey:watchCardKey,watchHash:watchHash,watchProfile:watchProfile,watchHistory:watchHistory,rememberWatch:rememberWatch,watchProgress:watchProgress,watchTime:watchTime,latestUnfinished:latestUnfinished,nextUnwatched:nextUnwatched,watchValues:watchValues,undoEligible:undoEligible,qualityProfile:qualityProfile,qualityLimit:qualityLimit,recordSourceHealth:recordSourceHealth,sourceHealth:sourceHealth,rankedGroups:rankedGroups,subtitleOptions:subtitleOptions,publishedSubtitles:publishedSubtitles,introSettings:introSettings,cleanSeason:cleanSeason,futureEpisode:futureEpisode,trackedShows:trackedShows,seriesInventory:seriesInventory,mergeSeriesCheck:mergeSeriesCheck,clearSearchCache:function(){searchCache.clear();},cacheKeys:function(){return Array.from(searchCache.keys());}};})();'):plugin;runInNewContext(code,context);advance(350);}
+ function boot(){const code=expose?plugin.replace(/\}\)\(\);\s*$/, 'window.__testMatching={matches:matches,names:names,voiceLabel:voiceLabel,sourcePickerRows:sourcePickerRows,quickMovieGroup:quickMovieGroup,get:get,voiceKey:voiceKey,ukrainian:ukrainian,chooseQuality:chooseQuality,knownHD:knownHD,decodedSD:decodedSD,hdCandidate:hdCandidate,verifyHD:verifyHD,qualityNote:qualityNote,episodeGroups:episodeGroups,backupGroups:backupGroups,deliveryFamily:deliveryFamily,streamItem:streamItem,sourcePreferences:sourcePreferences,sourceSearchOperation:sourceSearchOperation,sourceEnabled:sourceEnabled,orderedSources:orderedSources,preferredSource:preferredSource,displayGroups:displayGroups,cachedSearch:cachedSearch,favoriteIdentity:favoriteIdentity,favoriteVoices:favoriteVoices,favoriteVoice:favoriteVoice,watchCardKey:watchCardKey,watchHash:watchHash,watchProfile:watchProfile,watchHistory:watchHistory,rememberWatch:rememberWatch,watchProgress:watchProgress,watchTime:watchTime,latestUnfinished:latestUnfinished,nextUnwatched:nextUnwatched,watchValues:watchValues,undoEligible:undoEligible,qualityProfile:qualityProfile,qualityLimit:qualityLimit,recordSourceHealth:recordSourceHealth,sourceHealth:sourceHealth,rankedGroups:rankedGroups,subtitleOptions:subtitleOptions,publishedSubtitles:publishedSubtitles,introSettings:introSettings,cleanSeason:cleanSeason,futureEpisode:futureEpisode,trackedShows:trackedShows,seriesInventory:seriesInventory,mergeSeriesCheck:mergeSeriesCheck,clearSearchCache:function(){searchCache.clear();},cacheKeys:function(){return Array.from(searchCache.keys());}};})();'):plugin;runInNewContext(code,context);advance(350);}
  function enter(){assert.ok(button,'movie button is mounted');button.handlers['hover:enter']();}
  return {context,Lampa,values,components,scripts,pushes,notices,menus,timers,listeners,boot,advance,enter,get button(){return button;}};
 }
@@ -334,4 +334,30 @@ test('Aggregate sources keep short deadlines while Rezka can wake; cancellation 
  parent.abort();assert.equal(rezka.signal.aborted,true);h.advance(120000);assert.equal(rezkaTimeout,0);other.finish();rezka.finish();
  const owner=new AbortController(),finished=sourceSearchOperation({token:2,signal:owner.signal},'rezka',()=>rezkaTimeout++);finished.finish();h.advance(120000);assert.equal(rezkaTimeout,0);
  owner.abort();const cancelled=sourceSearchOperation({token:3,signal:owner.signal},'rezka',()=>rezkaTimeout++);assert.equal(cancelled.signal.aborted,true);h.advance(120000);assert.equal(rezkaTimeout,0);cancelled.finish();
+});
+
+test('Voice display labels remove advertised quality without altering stored studio identity',()=>{
+ const h=harness({expose:true});h.boot();const {voiceLabel}=h.context.__testMatching;
+ const raw='Дублированный [Русский | 4K, SDR]';assert.equal(voiceLabel(raw),'Дубльований [Російська]');
+ assert.equal(voiceLabel('Дубльований [Український | 1080p+]'),'Дубльований [Українська]');
+ assert.equal(voiceLabel('DniproFilm'),'DniproFilm');assert.equal(voiceLabel('JASKIER (HDR10+)'),'JASKIER');
+ const saved=harness({expose:true,stored:{xot_favorite_voices:[{title:raw,language:'ru'}]}});saved.boot();voiceLabel(raw);assert.equal(saved.context.__testMatching.favoriteVoices()[0].title,raw);assert.equal(saved.context.__testMatching.favoriteVoice([{provider:'filmix',translation:raw,language:'ru'}],['filmix']).translation,raw);
+});
+test('Source picker shows found entries first, retains current source and explicitly expands unavailable entries',()=>{
+ const h=harness({expose:true});h.boot();const {sourcePickerRows}=h.context.__testMatching;
+ const list=['all','empty','filmix','loading','found','current'].map(id=>({id,title:id}));
+ const groups=[{source:{id:'empty'},status:'empty'},{source:{id:'found'},status:'ready',count:3},{source:{id:'loading'},status:'loading'},{source:{id:'current'},status:'error'}];
+ const short=sourcePickerRows(list,groups,'current',false,false);
+ assert.deepEqual(Array.from(short,r=>r.id),['all','found','current','__more__']);assert.equal(short[1].subtitle,'Варіантів: 3');assert.equal(short[2].selected,true);
+ const full=sourcePickerRows(list,groups,'current',true,false);assert.equal(full.some(r=>r.id==='filmix'),false);assert.equal(full.some(r=>r.id==='empty'),true);
+ assert.equal(sourcePickerRows(list,groups,'current',true,true).some(r=>r.id==='filmix'),true);
+});
+test('Quick watch honors manual/favorite voice choices and never promotes unresolved or SD entries',()=>{
+ const h=harness({expose:true,stored:{xot_favorite_voices:[{title:'Улюблена',language:'uk'}]}});h.boot();const {quickMovieGroup}=h.context.__testMatching;
+ const group=(voice,quality='720p',extra={})=>({items:[{provider:'eneyida',translation:voice,voice_id:voice,language:'uk',quality,url:'https://cdn.example/'+voice+'.m3u8',...extra}]});
+ const normal=group('Інша'),favorite=group('Улюблена'),lazy=group('Улюблена','Авто',{needs_resolve:true}),sd=group('Улюблена','480p');
+ assert.equal(quickMovieGroup([lazy,sd,normal,favorite],null,true,['eneyida']),favorite);
+ assert.equal(quickMovieGroup([normal,favorite],'eneyida|Інша',true,['eneyida']),normal);
+ assert.equal(quickMovieGroup([lazy,sd],'Улюблена',true,['eneyida']),null);
+ assert.equal(quickMovieGroup([group('Episode','720p',{episode:1})],null,true,['eneyida']),null);
 });

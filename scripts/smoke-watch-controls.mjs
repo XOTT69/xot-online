@@ -33,7 +33,7 @@ try{
  gap=true;await page.evaluate(()=>$('.filter--filter').trigger('hover:enter'));await choose('Повторити пошук');await page.waitForFunction(()=>$('.xot-native-row.selector').length===2);assert.equal(await page.locator('.xot-next-row').count(),0);
  gap=false;locked=true;await page.evaluate(()=>$('.filter--filter').trigger('hover:enter'));await choose('Повторити пошук');await page.waitForTimeout(800);assert.equal(await page.locator('.xot-next-row').count(),0);
  // Filter provides the same controls for people without a long-press remote.
- await page.evaluate(()=>$('.filter--filter').trigger('hover:enter'));await choose('Позначки перегляду');await page.waitForFunction(()=>$('.selectbox').text().includes('Позначки сезону'));await choose('Готово');
+ await page.evaluate(()=>$('.filter--filter').trigger('hover:enter'));await choose('Налаштування ХОТ');await choose('Позначки перегляду');await page.waitForFunction(()=>$('.selectbox').text().includes('Позначки сезону'));await choose('Готово');
  // Unknown season totals expose navigation, never an assumed next-video launch.
  locked=false;await page.evaluate(()=>Lampa.Activity.backward());await open(false);
  for(const ep of [1,2,3])await update(2,ep,0);for(const ep of [1,2,3])await update(1,ep,100);
