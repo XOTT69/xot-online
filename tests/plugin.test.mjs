@@ -32,7 +32,7 @@ function harness({card=movie,ready=true,stored={},early=false,expose=false}={}) 
  context.window=context;
  if(early)delete context.Lampa;
  function advance(ms){const end=now+ms;let count=0;while(true){const due=[...timers].filter(([,v])=>v.at<=end).sort((a,b)=>a[1].at-b[1].at)[0];if(!due)break;if(++count>1000)throw Error('timer loop');now=due[1].at;timers.delete(due[0]);due[1].fn();}now=end;}
- function boot(){const code=expose?plugin.replace(/\}\)\(\);\s*$/, 'window.__testMatching={matches:matches,names:names,voiceLabel:voiceLabel,sourcePickerRows:sourcePickerRows,quickMovieGroup:quickMovieGroup,get:get,voiceKey:voiceKey,ukrainian:ukrainian,chooseQuality:chooseQuality,knownHD:knownHD,decodedSD:decodedSD,hdCandidate:hdCandidate,verifyHD:verifyHD,qualityNote:qualityNote,episodeGroups:episodeGroups,backupGroups:backupGroups,deliveryFamily:deliveryFamily,streamItem:streamItem,sourcePreferences:sourcePreferences,sourceSearchOperation:sourceSearchOperation,sourceEnabled:sourceEnabled,orderedSources:orderedSources,preferredSource:preferredSource,displayGroups:displayGroups,cachedSearch:cachedSearch,favoriteIdentity:favoriteIdentity,favoriteVoices:favoriteVoices,favoriteVoice:favoriteVoice,watchCardKey:watchCardKey,watchHash:watchHash,watchProfile:watchProfile,watchHistory:watchHistory,rememberWatch:rememberWatch,watchProgress:watchProgress,watchTime:watchTime,latestUnfinished:latestUnfinished,nextUnwatched:nextUnwatched,watchValues:watchValues,undoEligible:undoEligible,qualityProfile:qualityProfile,qualityLimit:qualityLimit,recordSourceHealth:recordSourceHealth,sourceHealth:sourceHealth,rankedGroups:rankedGroups,subtitleOptions:subtitleOptions,publishedSubtitles:publishedSubtitles,introSettings:introSettings,cleanSeason:cleanSeason,futureEpisode:futureEpisode,trackedShows:trackedShows,seriesInventory:seriesInventory,mergeSeriesCheck:mergeSeriesCheck,clearSearchCache:function(){searchCache.clear();},cacheKeys:function(){return Array.from(searchCache.keys());}};})();'):plugin;runInNewContext(code,context);advance(350);}
+ function boot(){const code=expose?plugin.replace(/\}\)\(\);\s*$/, 'window.__testMatching={matches:matches,names:names,voiceLabel:voiceLabel,sourcePickerRows:sourcePickerRows,seriesLane:seriesLane,legacySeriesChoice:legacySeriesChoice,quickMovieGroup:quickMovieGroup,get:get,voiceKey:voiceKey,ukrainian:ukrainian,chooseQuality:chooseQuality,knownHD:knownHD,decodedSD:decodedSD,hdCandidate:hdCandidate,verifyHD:verifyHD,qualityNote:qualityNote,episodeGroups:episodeGroups,backupGroups:backupGroups,deliveryFamily:deliveryFamily,streamItem:streamItem,sourcePreferences:sourcePreferences,sourceSearchOperation:sourceSearchOperation,sourceEnabled:sourceEnabled,orderedSources:orderedSources,preferredSource:preferredSource,displayGroups:displayGroups,cachedSearch:cachedSearch,favoriteIdentity:favoriteIdentity,favoriteVoices:favoriteVoices,favoriteVoice:favoriteVoice,watchCardKey:watchCardKey,watchHash:watchHash,watchProfile:watchProfile,watchHistory:watchHistory,rememberWatch:rememberWatch,watchProgress:watchProgress,watchTime:watchTime,latestUnfinished:latestUnfinished,nextUnwatched:nextUnwatched,watchValues:watchValues,undoEligible:undoEligible,qualityProfile:qualityProfile,qualityLimit:qualityLimit,recordSourceHealth:recordSourceHealth,sourceHealth:sourceHealth,rankedGroups:rankedGroups,subtitleOptions:subtitleOptions,publishedSubtitles:publishedSubtitles,introSettings:introSettings,cleanSeason:cleanSeason,futureEpisode:futureEpisode,trackedShows:trackedShows,seriesInventory:seriesInventory,mergeSeriesCheck:mergeSeriesCheck,clearSearchCache:function(){searchCache.clear();},cacheKeys:function(){return Array.from(searchCache.keys());}};})();'):plugin;runInNewContext(code,context);advance(350);}
  function enter(){assert.ok(button,'movie button is mounted');button.handlers['hover:enter']();}
  return {context,Lampa,values,components,scripts,pushes,notices,menus,timers,listeners,boot,advance,enter,get button(){return button;}};
 }
@@ -360,4 +360,49 @@ test('Quick watch honors manual/favorite voice choices and never promotes unreso
  assert.equal(quickMovieGroup([normal,favorite],'eneyida|Інша',true,['eneyida']),normal);
  assert.equal(quickMovieGroup([lazy,sd],'Улюблена',true,['eneyida']),null);
  assert.equal(quickMovieGroup([group('Episode','720p',{episode:1})],null,true,['eneyida']),null);
+});
+
+
+test('A series selects one source and one studio without collapsing original episode or quality identity',()=>{
+ const h=harness({expose:true,stored:{xot_favorite_voices:[{title:'Студія Б',language:'uk'}]}});h.boot();const {seriesLane,displayGroups}=h.context.__testMatching;
+ const rows=['eneyida','uaserials'].flatMap(provider=>['Студія А','Студія Б'].flatMap(translation=>[1,2].flatMap(episode=>[720,1080].map(q=>({provider,translation,language:'uk',voice_id:translation,season:1,episode,quality:q+'p',url:'https://cdn.example/'+provider+'-'+episode+'-'+translation+'-'+q+'.m3u8'})))));
+ const chosen=seriesLane(rows,null,null,null,['eneyida','uaserials']);assert.equal(chosen.translation,'Студія Б');assert.equal(chosen.provider,'eneyida');
+ const view=rows.filter(r=>r.provider===chosen.provider&&r.voice_id===chosen.voice_id);assert.equal(displayGroups(view,false).length,2);assert.equal(view.length,4);
+ assert.equal(seriesLane(rows,null,'uaserials',null,['eneyida','uaserials']).provider,'uaserials');
+});
+test('Late sources never replace a selected series studio; a missing or reused ID requires explicit choice',()=>{
+ const h=harness({expose:true});h.boot();const {seriesLane}=h.context.__testMatching;
+ const row={provider:'eneyida',translation:'Студія А',language:'uk',voice_id:'one',season:1,episode:1,quality:'720p'};
+ const previous={provider:'eneyida',voice_id:'one',translation:'Студія А'};
+ assert.equal(seriesLane([{...row,provider:'uaserials',quality:'2160p'},row],previous,null,null,['uaserials','eneyida']),row);
+ assert.equal(seriesLane([{...row,voice_id:'two'}],previous,null,null,['eneyida']),null);
+ assert.equal(seriesLane([{...row,translation:'Інша студія'}],previous,null,null,['eneyida']),null);
+ assert.equal(seriesLane([{...row,quality:'480p'}],null,null,null,['eneyida']),null);
+ assert.equal(seriesLane([{...row,provider:'uaserials'},row],null,'eneyida',{id:'eneyida|one',title:'Eneyida · Студія А'},['uaserials','eneyida']),row);
+});
+
+
+test('A next-episode queue never crosses to a different studio reusing the same voice ID in another season',()=>{
+ const h=harness({expose:true});h.boot();const {episodeGroups}=h.context.__testMatching;
+ const current={provider:'eneyida',voice_id:'one',translation:'Студія А',season:1,episode:1};
+ const groups=episodeGroups([current,{...current,episode:2},{...current,season:2,translation:'Студія Б'}],current);
+ assert.deepEqual(Array.from(groups,g=>[g[0].season,g[0].episode]),[[1,1],[1,2]]);
+});
+
+
+test('A native source with open translations can render its picker before optional diagnostic data arrives',()=>{
+ const h=harness({expose:true});h.boot();const {sourcePickerRows}=h.context.__testMatching;
+ const rows=sourcePickerRows([{id:'all',title:'Усі'},{id:'rezka',title:'HDRezka'}],[{source:{id:'rezka'},status:'open'}],'rezka',false,false);
+ assert.equal(rows.find(r=>r.id==='rezka').subtitle,'Озвучення знайдені');
+});
+
+
+test('Legacy explicit series voice preferences pin their original source before slower results arrive',()=>{
+ const h=harness({expose:true});h.boot();const {legacySeriesChoice,seriesLane}=h.context.__testMatching;
+ const sources=[{id:'eneyida',title:'Eneyida'},{id:'uaserials',title:'UASerials'}];
+ const previous=legacySeriesChoice({id:'eneyida|studio-b',title:'Eneyida · Студія Б'},'all',sources);
+ assert.deepEqual(JSON.parse(JSON.stringify(previous)),{provider:'eneyida',voice_id:'studio-b',translation:'Студія Б'});
+ assert.equal(seriesLane([{provider:'uaserials',voice_id:'studio-b',translation:'Студія Б',quality:'1080p',season:1,episode:1}],previous,previous.provider,null,['eneyida','uaserials']),null);
+ assert.equal(legacySeriesChoice(null,'all',sources),null);assert.equal(legacySeriesChoice({id:'missing|x',title:'Missing · A'},'all',sources),null);
+ assert.equal(legacySeriesChoice({id:'studio-b',title:'Студія Б'},'eneyida',sources).provider,'eneyida');
 });

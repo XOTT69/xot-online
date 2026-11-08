@@ -1,6 +1,6 @@
 {
   "name": "xot-online",
-  "version": "0.3.19",
+  "version": "0.3.20",
   "private": true,
   "type": "module",
   "scripts": {
@@ -29,7 +29,8 @@
     "smoke:player-comfort": "node scripts/smoke-player-comfort.mjs",
     "smoke:hd": "node scripts/smoke-hd.mjs",
     "smoke:ufdub-hd": "node scripts/smoke-ufdub-hd.mjs",
-    "smoke:rezka-hd": "node scripts/smoke-rezka-hd.mjs"
+    "smoke:rezka-hd": "node scripts/smoke-rezka-hd.mjs",
+    "smoke:series-ui": "node scripts/smoke-series-ui.mjs"
   },
   "devDependencies": {
     "playwright-core": "^1.61.1",

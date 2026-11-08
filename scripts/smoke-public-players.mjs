@@ -65,9 +65,7 @@ try{
  assert.equal(streamRequests.length,0,'Opening a series must not resolve every episode');
  const seasonOne=await page.evaluate(()=>$('.xot-native-row.selector').length);
  // Exercise season switching through the real filter menu.
- await page.evaluate(()=>$('.filter--filter').trigger('hover:enter'));
- await page.waitForFunction(()=>$('.selectbox').text().includes('Сезон 1'));
- await page.evaluate(()=>$('.selectbox .selector').filter(function(){return $(this).text().trim()==='Сезон 1';}).first().trigger('hover:enter'));
+ await page.evaluate(()=>$('.xot--season').trigger('hover:enter'));
  await page.waitForFunction(()=>$('.selectbox').text().includes('Сезон 2'));
  await page.evaluate(()=>$('.selectbox .selector').filter(function(){return $(this).text().trim()==='Сезон 2';}).first().trigger('hover:enter'));
  await page.waitForFunction(()=>!$('body').hasClass('selectbox--open')&&$('.xot-native-row.selector').length>0);
